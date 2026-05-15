@@ -204,11 +204,6 @@
       renderStats(overview);
       renderChart(overview.dailyCounts);
       
-      // 如果 KV 没连接，警告用户
-      if (overview.kvStatus === 'disconnected') {
-        alert('⚠️ Vercel KV 数据库未连接！\n\n请：\n1. 在 Vercel 项目 Storage 页创建 KV 数据库\n2. 连接到 founder-notes 项目\n3. 重新部署\n\n详细错误：' + overview.kvError);
-      }
-      
       // IP 列表
       const ipsData = await fetchAPI('ips');
       renderIPs(ipsData.ips);
@@ -229,24 +224,54 @@
       });
       const data = await res.json();
       
-      let report = '🔧 诊断结果\n\n';
-      report += '【KV 数据库】\n';
-      if (data.kv.available) {
-        report += '✅ 已连接\n\n';
-      } else {
-        report += '❌ 未连接\n';
-        report += '错误: ' + data.kv.error + '\n';
-        report += '提示: ' + data.kv.hint + '\n\n';
+      // 如果后端报错
+      if (data.error) {
+        alert('诊断接口报错: ' + data.error);
+        return;
       }
       
-      report += '【环境变量】\n';
-      for (const [key, value] of Object.entries(data.env)) {
-        report += `${key}: ${value}\n`;
+      let report = '🔧 诊断结果\n\n';
+      
+      // 数据库状态（兼容 v2 KV 和 v3 Supabase 两种格式）
+      if (data.database) {
+        // v3 Supabase 格式
+        report += `【数据库 - ${data.database.type || 'Supabase'}】\n`;
+        report += `状态: ${data.database.status || '未知'}\n`;
+        if (data.database.error) {
+          report += `错误: ${data.database.error}\n`;
+        }
+        report += '\n';
+      } else if (data.kv) {
+        // v2 KV 格式（旧版兼容）
+        report += '【KV 数据库】\n';
+        if (data.kv.available) {
+          report += '✅ 已连接\n\n';
+        } else {
+          report += '❌ 未连接\n';
+          report += '错误: ' + (data.kv.error || '未知') + '\n';
+          if (data.kv.hint) report += '提示: ' + data.kv.hint + '\n';
+          report += '\n';
+        }
+      } else {
+        report += '【数据库】\n⚠️ 未知格式\n\n';
       }
+      
+      // 环境变量
+      if (data.env) {
+        report += '【环境变量】\n';
+        for (const [key, value] of Object.entries(data.env)) {
+          report += `${key}: ${value}\n`;
+        }
+      }
+      
+      // 完整 JSON（供调试）
+      report += '\n--- 原始返回 ---\n';
+      report += JSON.stringify(data, null, 2);
       
       alert(report);
     } catch (err) {
-      alert('诊断失败: ' + err.message);
+      alert('诊断失败: ' + err.message + '\n\n请打开浏览器控制台（F12）查看详情');
+      console.error('Diagnose error:', err);
     }
   }
   

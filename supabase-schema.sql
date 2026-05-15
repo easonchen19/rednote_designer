@@ -36,8 +36,13 @@ CREATE TABLE IF NOT EXISTS request_logs (
   input_tokens INTEGER DEFAULT 0,
   output_tokens INTEGER DEFAULT 0,
   estimated_cost NUMERIC(10, 6) DEFAULT 0,
+  model TEXT,                    -- 实际使用的模型（Haiku/Sonnet/Opus）
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 如果是从老版本升级（已经有 request_logs 表），需要补充 model 列
+-- 这条语句对新建表是 no-op，对老表会添加列
+ALTER TABLE request_logs ADD COLUMN IF NOT EXISTS model TEXT;
 
 -- 查询优化索引
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON request_logs (timestamp DESC);

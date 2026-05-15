@@ -623,7 +623,14 @@ Bridge 轮不是续命，是埋葬</textarea></div>
       
       if (!response.ok) {
         const data = await response.json().catch(() => ({ error: '服务出错' }));
-        throw new Error(data.error || `服务错误 ${response.status}`);
+        let errMsg = data.error || `服务错误 ${response.status}`;
+        if (data.hint) {
+          errMsg += '\n💡 ' + data.hint;
+        }
+        if (data.debug) {
+          console.error('详细错误:', data.debug);
+        }
+        throw new Error(errMsg);
       }
       
       const data = await response.json();
@@ -824,6 +831,7 @@ Bridge 轮不是续命，是埋葬</textarea></div>
     let fullText = '';
     let chapterCount = 0;
     let phase = 'thinking';
+    let backendError = null;  // ⭐ 收集后端错误
     
     while (true) {
       const { done, value } = await reader.read();
@@ -838,6 +846,21 @@ Bridge 轮不是续命，是埋葬</textarea></div>
         if (data === '[DONE]') continue;
         try {
           const json = JSON.parse(data);
+          
+          // ⭐ 检测后端错误
+          if (json.type === 'error') {
+            backendError = json.message || '未知错误';
+            console.error('后端返回错误:', backendError);
+            continue;
+          }
+          
+          // ⭐ 检测后端告知使用的模型
+          if (json.type === 'model_info') {
+            console.log('使用模型:', json.model);
+            setStep('connect', 'done', `已连接 (${json.model})`);
+            continue;
+          }
+          
           if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
             const chunk = json.delta.text;
             fullText += chunk;
@@ -872,6 +895,16 @@ Bridge 轮不是续命，是埋葬</textarea></div>
           }
         } catch (e) {}
       }
+    }
+    
+    // ⭐ 如果有后端错误，抛出
+    if (backendError) {
+      throw new Error(backendError);
+    }
+    
+    // ⭐ 如果没有任何输出，抛出
+    if (!fullText.trim()) {
+      throw new Error('AI 没有返回任何内容，请重试');
     }
     
     clearCursor();

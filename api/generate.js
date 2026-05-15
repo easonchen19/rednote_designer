@@ -144,7 +144,8 @@ async function logRequest(data) {
       duration_ms: data.duration,
       input_tokens: data.inputTokens || 0,
       output_tokens: data.outputTokens || 0,
-      estimated_cost: parseFloat(data.estimatedCost || 0)
+      estimated_cost: parseFloat(data.estimatedCost || 0),
+      model: data.model || null
     });
   if (error) console.error('Log insert error:', error);
 }
@@ -224,29 +225,133 @@ export default async function handler(req, res) {
       messageContent = `把下面想法提炼成 Founder Notes 完整发布包：\n\n${userInput}`;
     }
     
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 12000,
-        system: SYSTEM_PROMPT,
-        stream: true,
-        messages: [{ role: 'user', content: messageContent }]
-      })
-    });
+    // ⭐ 三层 Fallback：Haiku 主力 → Sonnet 备用 → Opus 终极保底
+    // 每个模型最多重试 2 次，总共 6 次尝试，但实际只用 1-3 次就成
+    const MODEL_CHAIN = [
+      { id: 'claude-haiku-4-5',  name: 'Haiku 4.5',  maxRetries: 2 },
+      { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', maxRetries: 2 },
+      { id: 'claude-opus-4-7',   name: 'Opus 4.7',   maxRetries: 2 }
+    ];
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Claude API error:', response.status, errorText);
-      res.write(`data: ${JSON.stringify({ type: 'error', message: 'AI 服务暂时不可用' })}\n\n`);
+    let response = null;
+    let usedModel = null;
+    let lastError = null;
+    
+    for (const model of MODEL_CHAIN) {
+      let success = false;
+      
+      for (let attempt = 1; attempt <= model.maxRetries; attempt++) {
+        try {
+          const resp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: model.id,
+              max_tokens: 12000,
+              system: SYSTEM_PROMPT,
+              stream: true,
+              messages: [{ role: 'user', content: messageContent }]
+            })
+          });
+          
+          if (resp.ok) {
+            response = resp;
+            usedModel = model.name;
+            success = true;
+            console.log(`✅ 使用 ${model.name}（第 ${attempt} 次尝试成功）`);
+            break;
+          }
+          
+          // 529 过载：在当前模型内重试
+          if (resp.status === 529) {
+            console.log(`⚠️ ${model.name} 过载，第 ${attempt}/${model.maxRetries} 次`);
+            lastError = { status: 529, model: model.name };
+            if (attempt < model.maxRetries) {
+              // 短延迟后重试同一模型
+              await new Promise(r => setTimeout(r, 1500 * attempt));
+              continue;
+            }
+            // 用完当前模型重试次数，跳到下一个模型
+            break;
+          }
+          
+          // 其他错误（如 401/400），不是过载，不要切换模型
+          const errorText = await resp.text();
+          console.error(`❌ ${model.name} 错误:`, resp.status, errorText);
+          lastError = { status: resp.status, errorText, model: model.name };
+          
+          // 严重错误（如 401 API Key 错），直接退出，不切换模型
+          if (resp.status === 401 || resp.status === 400) {
+            response = resp;
+            response._errorText = errorText;
+            success = false;
+            break;
+          }
+          
+          // 其他错误，也算失败，继续重试当前模型
+          if (attempt < model.maxRetries) {
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+          
+        } catch (err) {
+          // 网络错误
+          console.error(`❌ ${model.name} 网络错误:`, err.message);
+          lastError = { status: 0, errorText: err.message, model: model.name };
+          if (attempt < model.maxRetries) {
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+        }
+      }
+      
+      if (success) break;
+      
+      // 如果是 401/400 这种严重错误，直接退出整个循环
+      if (lastError && (lastError.status === 401 || lastError.status === 400)) {
+        console.log('严重错误，停止 fallback');
+        break;
+      }
+      
+      // 否则继续下一个模型
+      console.log(`➡️ 降级到下一个模型`);
+    }
+    
+    // 如果所有模型都失败
+    if (!response || !response.ok) {
+      let errorMsg = 'AI 服务暂时不可用';
+      
+      if (lastError) {
+        if (lastError.status === 529) {
+          errorMsg = `所有 AI 模型都繁忙（已尝试 Haiku/Sonnet/Opus）。请等 1-2 分钟再试。这是 Anthropic 服务端的临时高负载，不是你的问题。`;
+        } else if (lastError.status === 401) {
+          errorMsg = 'API Key 无效，请联系管理员';
+        } else if (lastError.status === 400) {
+          // 解析 400 错误的具体信息
+          try {
+            const errJson = JSON.parse(lastError.errorText || '{}');
+            errorMsg = '请求错误: ' + (errJson.error?.message || lastError.errorText);
+          } catch (e) {
+            errorMsg = '请求错误: ' + (lastError.errorText || '未知');
+          }
+        } else if (lastError.status === 429) {
+          errorMsg = '请求频率超限，请等几分钟再试';
+        } else {
+          errorMsg = `AI 服务出错（${lastError.model} HTTP ${lastError.status}）`;
+        }
+      }
+      
+      res.write(`data: ${JSON.stringify({ type: 'error', message: errorMsg })}\n\n`);
       res.end();
       return;
     }
+    
+    // 告诉前端用的哪个模型（透明给用户）
+    res.write(`data: ${JSON.stringify({ type: 'model_info', model: usedModel })}\n\n`);
     
     // 增加计数（成功调用 API 后）
     await incrementCount('ip', ip, today);
@@ -293,6 +398,15 @@ export default async function handler(req, res) {
     
     const duration = Date.now() - startTime;
     
+    // 根据实际使用的模型计算成本（不同模型价格不同）
+    const PRICING = {
+      'Haiku 4.5':  { input: 0.000001, output: 0.000005 },   // $1/$5 per MTok
+      'Sonnet 4.6': { input: 0.000003, output: 0.000015 },   // $3/$15 per MTok
+      'Opus 4.7':   { input: 0.000005, output: 0.000025 }    // $5/$25 per MTok
+    };
+    const pricing = PRICING[usedModel] || PRICING['Opus 4.7'];
+    const estimatedCost = (inputTokens * pricing.input + outputTokens * pricing.output).toFixed(6);
+    
     // 异步写日志（不阻塞响应）
     logRequest({
       ip,
@@ -304,7 +418,8 @@ export default async function handler(req, res) {
       duration,
       inputTokens,
       outputTokens,
-      estimatedCost: (inputTokens * 0.000003 + outputTokens * 0.000015).toFixed(6)
+      estimatedCost,
+      model: usedModel  // 记录用的哪个模型
     }).catch(err => console.error('Log error:', err));
     
   } catch (error) {

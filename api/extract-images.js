@@ -115,24 +115,118 @@ export default async function handler(req, res) {
       }
     ];
     
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-5',
-        max_tokens: 8000,
-        messages: [{ role: 'user', content: messageContent }]
-      })
-    });
+    // ⭐ 三层 Fallback：Haiku → Sonnet → Opus
+    const MODEL_CHAIN = [
+      { id: 'claude-haiku-4-5',  name: 'Haiku 4.5',  maxRetries: 2 },
+      { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', maxRetries: 2 },
+      { id: 'claude-opus-4-7',   name: 'Opus 4.7',   maxRetries: 2 }
+    ];
     
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Claude Vision error:', response.status, errorText);
-      return res.status(500).json({ error: '图片识别失败，请重试' });
+    let response = null;
+    let usedModel = null;
+    let lastError = null;
+    
+    for (const model of MODEL_CHAIN) {
+      let success = false;
+      
+      for (let attempt = 1; attempt <= model.maxRetries; attempt++) {
+        try {
+          const resp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: model.id,
+              max_tokens: 8000,
+              messages: [{ role: 'user', content: messageContent }]
+            })
+          });
+          
+          if (resp.ok) {
+            response = resp;
+            usedModel = model.name;
+            success = true;
+            console.log(`✅ 使用 ${model.name}`);
+            break;
+          }
+          
+          if (resp.status === 529) {
+            console.log(`⚠️ ${model.name} 过载，第 ${attempt}/${model.maxRetries} 次`);
+            lastError = { status: 529, model: model.name };
+            if (attempt < model.maxRetries) {
+              await new Promise(r => setTimeout(r, 1500 * attempt));
+              continue;
+            }
+            break;
+          }
+          
+          const errorText = await resp.text();
+          lastError = { status: resp.status, errorText, model: model.name };
+          
+          if (resp.status === 401 || resp.status === 400) {
+            // 严重错误，不切换模型
+            response = resp;
+            break;
+          }
+          
+          if (attempt < model.maxRetries) {
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+          
+        } catch (err) {
+          console.error(`❌ ${model.name} 网络错误:`, err.message);
+          lastError = { status: 0, errorText: err.message, model: model.name };
+          if (attempt < model.maxRetries) {
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+            continue;
+          }
+        }
+      }
+      
+      if (success) break;
+      
+      if (lastError && (lastError.status === 401 || lastError.status === 400)) {
+        break;
+      }
+    }
+    
+    if (!response || !response.ok) {
+      let errorMsg = '图片识别失败';
+      let userHint = '';
+      
+      if (lastError) {
+        if (lastError.status === 529) {
+          errorMsg = '所有 AI 模型都繁忙';
+          userHint = '已尝试 Haiku/Sonnet/Opus 都返回过载，请等 1-2 分钟再试';
+        } else if (lastError.status === 401) {
+          errorMsg = 'API Key 无效';
+          userHint = '请联系管理员';
+        } else if (lastError.status === 429) {
+          errorMsg = '请求频率超限';
+          userHint = '请稍等几分钟再试';
+        } else {
+          try {
+            const errJson = JSON.parse(lastError.errorText || '{}');
+            if (errJson.error?.message) errorMsg += ': ' + errJson.error.message;
+          } catch (e) {
+            errorMsg += `: HTTP ${lastError.status}`;
+          }
+        }
+      }
+      
+      return res.status(lastError?.status === 529 ? 503 : 500).json({ 
+        error: errorMsg,
+        hint: userHint,
+        debug: {
+          model: lastError?.model,
+          claudeStatus: lastError?.status,
+          claudeError: (lastError?.errorText || '').slice(0, 500)
+        }
+      });
     }
     
     const data = await response.json();
@@ -143,6 +237,14 @@ export default async function handler(req, res) {
     // 增加计数
     await incrementCount('extract-ip', ip, today);
     await incrementCount('extract-global', 'global', today);
+    
+    // 根据实际使用的模型计算成本
+    const PRICING = {
+      'Haiku 4.5':  { input: 0.000001, output: 0.000005 },
+      'Sonnet 4.6': { input: 0.000003, output: 0.000015 },
+      'Opus 4.7':   { input: 0.000005, output: 0.000025 }
+    };
+    const pricing = PRICING[usedModel] || PRICING['Opus 4.7'];
     
     // 写日志
     const duration = Date.now() - startTime;
@@ -155,11 +257,13 @@ export default async function handler(req, res) {
       duration_ms: duration,
       input_tokens: inputTokens,
       output_tokens: outputTokens,
-      estimated_cost: parseFloat((inputTokens * 0.000003 + outputTokens * 0.000015).toFixed(6))
+      estimated_cost: parseFloat((inputTokens * pricing.input + outputTokens * pricing.output).toFixed(6)),
+      model: usedModel
     });
     
     return res.status(200).json({
       text: extractedText,
+      model: usedModel,
       stats: {
         imageCount: images.length,
         duration,
