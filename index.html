@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -461,7 +462,7 @@ Founder
     </div>
     <div class="input-group"><label>钩子句</label><textarea id="hook" rows="2">过去半年我看了 40 个 deck。
 3 个共同的错误。</textarea></div>
-    <div class="input-group"><label>账号名</label><input type="text" id="author" value="@ 你的账号名"></div>
+    <div class="input-group"><label>账号名</label><input type="text" id="author" value="纽约创始人 Eason"></div>
     
     <hr class="section-divider">
     <div class="section-label">章节列表</div>
@@ -1071,8 +1072,12 @@ Bridge 轮不是续命，是埋葬</textarea></div>
   function fillFromAI(data) {
     document.getElementById('series').value = data.series || 'FOUNDER NOTES · 01';
     document.getElementById('title').value = (data.title_lines || []).filter(x => x).join('\n');
-    document.getElementById('word-count').value = data.word_count || '2,500 字';
-    document.getElementById('read-time').value = data.read_time || '6 分钟';
+    
+    // ⭐ 动态计算实际字数（不用 AI 给的，AI 经常不准）
+    const calculatedStats = calculateWordCountAndReadTime(data);
+    document.getElementById('word-count').value = calculatedStats.wordCount;
+    document.getElementById('read-time').value = calculatedStats.readTime;
+    
     document.getElementById('hook').value = data.hook || '';
     chapters = data.chapters || [];
     renderChapterInputs();
@@ -1081,6 +1086,41 @@ Bridge 轮不是续命，是埋葬</textarea></div>
     document.getElementById('cta-summary').value = (data.cta_summary || []).join('\n');
     document.getElementById('cta-text').value = data.cta_text || '';
     renderPreview();
+  }
+  
+  // ⭐ 根据实际内容计算字数和阅读时间
+  function calculateWordCountAndReadTime(data) {
+    // 收集所有正文内容
+    let allText = '';
+    allText += (data.hook || '') + ' ';
+    (data.chapters || []).forEach(ch => {
+      allText += (ch.title || '') + ' ';
+      allText += (ch.quote || '') + ' ';
+      allText += (ch.body || '') + ' ';
+    });
+    allText += (data.cta_title || '') + ' ';
+    allText += (data.cta_summary || []).join(' ') + ' ';
+    allText += (data.cta_text || '') + ' ';
+    
+    // 去掉 markdown 标记符号
+    const cleanText = allText.replace(/\*\*/g, '').replace(/\*/g, '');
+    
+    // 计算中文字符数 + 英文单词数
+    const chineseChars = (cleanText.match(/[\u4e00-\u9fa5]/g) || []).length;
+    const englishWords = (cleanText.match(/[a-zA-Z]+/g) || []).length;
+    const totalCount = chineseChars + englishWords;
+    
+    // 阅读速度：中文 350 字/分钟，英文 250 词/分钟，混合估算 300 字/分钟
+    const readMinutes = Math.max(1, Math.round(totalCount / 300));
+    
+    // 格式化字数（加千分位逗号）
+    const formattedCount = totalCount.toLocaleString('en-US') + ' 字';
+    
+    return {
+      wordCount: formattedCount,
+      readTime: readMinutes + ' 分钟',
+      rawCount: totalCount
+    };
   }
   
   function showPostSection(data) {
@@ -1330,7 +1370,10 @@ Bridge 轮不是续命，是埋葬</textarea></div>
   });
   
   const savedAuthor = localStorage.getItem('default_author');
-  if (savedAuthor) document.getElementById('author').value = savedAuthor;
+  // 如果保存的是旧默认值，不应用，让它用新的默认 "纽约创始人 Eason"
+  if (savedAuthor && savedAuthor !== '@ 你的账号名' && savedAuthor.trim() !== '') {
+    document.getElementById('author').value = savedAuthor;
+  }
   
   renderChapterInputs();
   renderPreview();
