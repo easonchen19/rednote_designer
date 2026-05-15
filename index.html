@@ -503,7 +503,7 @@ Founder
   
   <div class="preview">
     <div class="preview-actions">
-      <button class="btn-download" id="download-btn" onclick="downloadAll()">📦 一键下载所有图片（ZIP）</button>
+      <button class="btn-download" id="download-btn" onclick="downloadAll()">📥 下载所有图片</button>
     </div>
     <div id="pages-output"></div>
   </div>
@@ -1545,30 +1545,36 @@ Founder
     document.body.classList.add('exporting');
     try {
       const pages = document.querySelectorAll('#pages-output .page');
-      const zip = new JSZip();
+      const dateStr = new Date().toISOString().slice(0, 10);
+      const files = [];
       for (let i = 0; i < pages.length; i++) {
         const page = pages[i];
         const pageType = page.getAttribute('data-page');
         btn.innerHTML = `<span class="loading"></span>生成中 ${i+1}/${pages.length}...`;
         const canvas = await html2canvas(page, { scale: 3, backgroundColor: null, logging: false, useCORS: true });
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-        zip.file(`${pageType}.png`, blob);
+        files.push(new File([blob], `xiaohongshu_${dateStr}_${pageType}.png`, { type: 'image/png' }));
       }
-      btn.innerHTML = '<span class="loading"></span>打包 ZIP...';
-      const content = await zip.generateAsync({ type: 'blob' });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `xiaohongshu_${new Date().toISOString().slice(0, 10)}.zip`;
-      a.click();
-      URL.revokeObjectURL(url);
+
+      for (let i = 0; i < files.length; i++) {
+        btn.innerHTML = `<span class="loading"></span>下载中 ${i+1}/${files.length}...`;
+        const url = URL.createObjectURL(files[i]);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = files[i].name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        await new Promise(r => setTimeout(r, 250));
+        URL.revokeObjectURL(url);
+      }
       btn.innerHTML = '✅ 下载完成！';
-      setTimeout(() => { btn.innerHTML = '📦 一键下载所有图片（ZIP）'; btn.disabled = false; }, 2000);
+      setTimeout(() => { btn.innerHTML = '📥 下载所有图片'; btn.disabled = false; }, 2000);
     } catch (err) {
       console.error(err);
       btn.innerHTML = '❌ 下载失败';
       btn.disabled = false;
-      setTimeout(() => { btn.innerHTML = '📦 一键下载所有图片（ZIP）'; }, 2000);
+      setTimeout(() => { btn.innerHTML = '📥 下载所有图片'; }, 2000);
     } finally {
       document.body.classList.remove('exporting');
     }
