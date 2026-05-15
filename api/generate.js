@@ -1,4 +1,4 @@
-// /api/generate.js - 后端代理：调用 Claude + 限流 + 记录
+// /api/generate.js - Claude 代理 + 限流 + 日志（支持图片输入）
 import { kv } from '@vercel/kv';
 
 const SYSTEM_PROMPT = `你是一个小红书爆款内容编辑，专门写"Founder Notes"风格的笔记，并且懂小红书 SEO + 算法推荐。
@@ -15,7 +15,7 @@ const SYSTEM_PROMPT = `你是一个小红书爆款内容编辑，专门写"Found
 - \`**关键词**\` → 金色加粗
 - \`*数字*\` → 金色
 
-输出格式（严格遵循 XML）：
+输出格式（严格遵循 XML，必须以 </note> 结尾）：
 
 <note>
 <series>FOUNDER NOTES · 0X</series>
@@ -39,13 +39,8 @@ const SYSTEM_PROMPT = `你是一个小红书爆款内容编辑，专门写"Found
 结论2
 结论3</cta_summary>
 <cta_text>软广文案</cta_text>
-
-<social_title>小红书帖子标题，带 1-2 个 emoji，14-20 字，制造好奇 + 数字 + 反共识</social_title>
-<social_body>小红书帖子正文（不是图片里的内容），150-200 字。结构：
-1. 第一句重复或扩展标题里的钩子
-2. 中间用问题或场景拉近距离  
-3. 结尾引导评论或私信
-可以用 emoji 但克制，每段一个 emoji 足够。</social_body>
+<social_title>小红书帖子标题，带 1-2 个 emoji，14-20 字</social_title>
+<social_body>小红书帖子正文（不是图片里的内容），150-200 字</social_body>
 <social_tags>Founder
 创业
 硅谷
@@ -59,16 +54,17 @@ AI创业
 </note>
 
 要求：
-1. 封面 4 行标题：每行不超过 5 字，**不要用 \*\***
-2. <chapter> 标签 3-5 个，每个 body 200-500 字
-3. 章节标题、金句、结论用 \`**\` 突出关键词
-4. social_title：必须有 1-2 个 emoji，要让人想点开
-5. social_body：必须用第一人称，有"在场感"
-6. social_tags：5-10 个，覆盖大词 + 中词 + 长尾词
+1. 封面 4 行标题：每行不超过 5 字，不要用 \*\*
+2. <chapter> 标签 3-5 个，**每个 body 写 400-800 字**（内容要饱满，不要压缩）
+3. **总字数控制在 3000-5000 中文字**（让内容有深度）
+4. 章节标题、金句、结论用 \`**\` 突出关键词
+5. social_title：必须有 1-2 个 emoji
+6. social_tags：5-10 个
+
+**关键：必须以 </note> 结尾！**
 
 只输出 <note>...</note>，不要其他内容。`;
 
-// 获取客户端 IP
 function getClientIp(req) {
   const forwarded = req.headers['x-forwarded-for'];
   const realIp = req.headers['x-real-ip'];
@@ -77,59 +73,44 @@ function getClientIp(req) {
   return 'unknown';
 }
 
-// 获取今天的日期字符串
 function getTodayKey() {
-  return new Date().toISOString().slice(0, 10); // 2026-05-14
+  return new Date().toISOString().slice(0, 10);
 }
 
-// 检查 IP 限流
 async function checkIpLimit(ip, limit) {
   const key = `rate:ip:${ip}:${getTodayKey()}`;
   const count = (await kv.get(key)) || 0;
-  if (count >= limit) {
-    return { allowed: false, current: count, limit };
-  }
-  return { allowed: true, current: count, limit };
+  return { allowed: count < limit, current: count, limit };
 }
 
-// 检查全局限流
 async function checkGlobalLimit(limit) {
   const key = `rate:global:${getTodayKey()}`;
   const count = (await kv.get(key)) || 0;
-  if (count >= limit) {
-    return { allowed: false, current: count, limit };
-  }
-  return { allowed: true, current: count, limit };
+  return { allowed: count < limit, current: count, limit };
 }
 
-// 增加计数
-async function incrementCounters(ip) {
+async function incrementCounters(ip, type = 'generate') {
   const today = getTodayKey();
   const ipKey = `rate:ip:${ip}:${today}`;
   const globalKey = `rate:global:${today}`;
+  const typeKey = `rate:type:${type}:${today}`;
   
   await kv.incr(ipKey);
-  await kv.expire(ipKey, 86400 * 2); // 2 天后过期
-  
+  await kv.expire(ipKey, 86400 * 2);
   await kv.incr(globalKey);
   await kv.expire(globalKey, 86400 * 2);
+  await kv.incr(typeKey);
+  await kv.expire(typeKey, 86400 * 90);
 }
 
-// 记录请求日志
 async function logRequest(data) {
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const logKey = `log:${id}`;
+  await kv.set(`log:${id}`, JSON.stringify(data));
+  await kv.expire(`log:${id}`, 86400 * 90);
   
-  await kv.set(logKey, JSON.stringify(data));
-  await kv.expire(logKey, 86400 * 90); // 保留 90 天
-  
-  // 添加到当天的日志索引
   const today = getTodayKey();
-  const indexKey = `log-index:${today}`;
-  await kv.lpush(indexKey, id);
-  await kv.expire(indexKey, 86400 * 90);
-  
-  // 全局日志索引（最近 1000 条）
+  await kv.lpush(`log-index:${today}`, id);
+  await kv.expire(`log-index:${today}`, 86400 * 90);
   await kv.lpush('log-index:all', id);
   await kv.ltrim('log-index:all', 0, 999);
   
@@ -137,7 +118,6 @@ async function logRequest(data) {
 }
 
 export default async function handler(req, res) {
-  // 只允许 POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -147,21 +127,23 @@ export default async function handler(req, res) {
   const startTime = Date.now();
   
   try {
-    const { userInput } = req.body || {};
+    const { userInput, images } = req.body || {};
     
     if (!userInput || typeof userInput !== 'string') {
-      return res.status(400).json({ error: '请输入你的想法' });
+      return res.status(400).json({ error: '请输入想法' });
+    }
+    if (userInput.length > 8000) {
+      return res.status(400).json({ error: '输入过长，请精简到 8000 字以内' });
     }
     
-    if (userInput.length > 5000) {
-      return res.status(400).json({ error: '输入内容过长，请精简到 5000 字以内' });
+    const hasImages = images && Array.isArray(images) && images.length > 0;
+    if (hasImages && images.length > 5) {
+      return res.status(400).json({ error: '最多 5 张图片' });
     }
     
-    // 限流配置
     const IP_LIMIT = parseInt(process.env.DAILY_IP_LIMIT || '10');
     const GLOBAL_LIMIT = parseInt(process.env.DAILY_GLOBAL_LIMIT || '100');
     
-    // 检查全局限流
     const globalCheck = await checkGlobalLimit(GLOBAL_LIMIT);
     if (!globalCheck.allowed) {
       return res.status(429).json({
@@ -170,7 +152,6 @@ export default async function handler(req, res) {
       });
     }
     
-    // 检查 IP 限流
     const ipCheck = await checkIpLimit(ip, IP_LIMIT);
     if (!ipCheck.allowed) {
       return res.status(429).json({
@@ -179,16 +160,35 @@ export default async function handler(req, res) {
       });
     }
     
-    // 调用 Claude API
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      return res.status(500).json({ error: '服务未配置，请联系管理员' });
+      return res.status(500).json({ error: '服务未配置' });
     }
     
-    // 设置 SSE 响应头（流式传输）
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    
+    // 构建 message content（支持图片）
+    let messageContent;
+    if (hasImages) {
+      messageContent = [
+        ...images.map(img => ({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: img.mimeType || 'image/jpeg',
+            data: img.base64
+          }
+        })),
+        {
+          type: 'text',
+          text: `请参考这些图片的内容，结合下面我的想法，提炼成 Founder Notes：\n\n${userInput}`
+        }
+      ];
+    } else {
+      messageContent = `把下面想法提炼成 Founder Notes 完整发布包：\n\n${userInput}`;
+    }
     
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -199,10 +199,10 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-opus-4-5',
-        max_tokens: 8000,
+        max_tokens: 12000,  // ⭐ 支持中文 3000-5000 字输出（含 XML 标签开销 + 安全余量）
         system: SYSTEM_PROMPT,
         stream: true,
-        messages: [{ role: 'user', content: `把下面想法提炼成 Founder Notes 完整发布包：\n\n${userInput}` }]
+        messages: [{ role: 'user', content: messageContent }]
       })
     });
     
@@ -214,10 +214,8 @@ export default async function handler(req, res) {
       return;
     }
     
-    // 增加计数（在成功调用 API 后）
-    await incrementCounters(ip);
+    await incrementCounters(ip, 'generate');
     
-    // 转发 SSE 流给前端，同时收集完整内容
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -231,11 +229,8 @@ export default async function handler(req, res) {
       
       const chunk = decoder.decode(value, { stream: true });
       buffer += chunk;
-      
-      // 直接转发给前端
       res.write(chunk);
       
-      // 同时解析以记录
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
       
@@ -262,12 +257,13 @@ export default async function handler(req, res) {
     
     const duration = Date.now() - startTime;
     
-    // 异步记录日志（不阻塞响应）
     logRequest({
       timestamp: new Date().toISOString(),
       ip,
       userAgent,
+      type: hasImages ? 'generate-with-images' : 'generate',
       userInput: userInput.slice(0, 5000),
+      imageCount: hasImages ? images.length : 0,
       output: fullText.slice(0, 20000),
       duration,
       inputTokens,
@@ -286,5 +282,10 @@ export default async function handler(req, res) {
 }
 
 export const config = {
-  maxDuration: 60
+  maxDuration: 60,
+  api: {
+    bodyParser: {
+      sizeLimit: '30mb' // 支持图片上传
+    }
+  }
 };

@@ -1,44 +1,47 @@
-# 🚀 Founder Notes 部署上线指南
+# 🚀 Founder Notes v2 部署指南
 
-完整部署到 Vercel 的图文教程。**预计耗时：30-45 分钟**。
+完整部署到 Vercel 的图文教程，**包含图片提取 + 语音输入新功能**。
+
+预计耗时：**30-45 分钟**（如果你之前部署过 v1，只需 10 分钟更新）
 
 ---
 
-## 📋 准备清单
+## 📋 如果你之前部署过 v1，看这里（10 分钟）
 
-部署前请准备好：
-- [ ] GitHub 账号（免费）
+直接更新即可，不需要重新部署：
+
+### 步骤
+1. **替换 GitHub 仓库的文件**：
+   - 用本 ZIP 里的 `index.html` 替换旧的
+   - 用本 ZIP 里的 `api/generate.js` 替换旧的
+   - 用本 ZIP 里的 `api/admin-stats.js` 替换旧的
+   - **新增**：上传 `api/extract-images.js`（这是新功能）
+2. **在 Vercel 加一个新环境变量**：
+   - `DAILY_EXTRACT_IP_LIMIT` = `5`（每 IP 每天图片提取 5 次）
+3. **等 Vercel 自动重新部署**（push 后约 30 秒）
+4. 完成！访问网址试试新功能
+
+---
+
+## 📋 如果是首次部署，看下面完整流程
+
+### 准备清单
+- [ ] GitHub 账号
 - [ ] Vercel 账号（免费，用 GitHub 登录）
-- [ ] Anthropic API Key（你已有）
-- [ ] 一个**安全的管理员密码**（部署时设置，不要告诉任何人）
+- [ ] Anthropic API Key
+- [ ] 一个强管理员密码
 
 ---
 
 ## Step 1：上传代码到 GitHub（10 分钟）
 
-### 方法 A：网页操作（推荐新手）
-
 1. 打开 https://github.com/new
-2. Repository name 填：`founder-notes`
-3. 选 **Private**（私有仓库，免费）
+2. Repository name: `founder-notes`
+3. 选 **Private**
 4. 点 **Create repository**
-5. 在新仓库页面，点 **uploading an existing file**
-6. **把整个 `founder-notes-saas` 文件夹里的文件全部拖进去**（不要拖文件夹本身）
-   - 包括：`index.html`、`admin.html`、`package.json`、`vercel.json`、`.env.example`、`api/` 文件夹及其内容
-7. 底部填提交信息：`Initial commit`
-8. 点 **Commit changes**
-
-### 方法 B：用 Git 命令行（如果你会）
-
-```bash
-cd founder-notes-saas
-git init
-git add .
-git commit -m "Initial commit"
-git branch -M main
-git remote add origin https://github.com/你的用户名/founder-notes.git
-git push -u origin main
-```
+5. 点 **uploading an existing file**
+6. **解压本 ZIP，把所有文件拖进去**（不要拖外层文件夹本身）
+7. Commit changes
 
 ---
 
@@ -46,184 +49,173 @@ git push -u origin main
 
 1. 打开 https://vercel.com
 2. 用 GitHub 登录
-3. 点首页 **Add New... → Project**
-4. 找到你的 `founder-notes` 仓库，点 **Import**
-5. **保持默认设置不要改**，直接点 **Deploy**
-6. 等 30 秒 - 1 分钟，Vercel 会自动部署
-
-> ⚠️ **此时部署会成功但功能不能用**，因为还没设置环境变量。下一步配置。
+3. 点 **Add New... → Project**
+4. 找到 `founder-notes`，点 **Import**
+5. 点 **Deploy**
+6. 等部署完成
 
 ---
 
 ## Step 3：创建 Vercel KV 数据库（5 分钟）
 
-KV 是 Vercel 自己的数据库，用来存使用记录和限流计数。
-
-1. 在你的 Vercel 项目页，顶部菜单点 **Storage**
-2. 点 **Create Database**
-3. 选 **KV (Redis)**
-4. Database Name：`founder-notes-kv`
-5. Region：选择**离你最近的**（美国选 `iad1`，亚洲选 `sin1`）
-6. 点 **Create**
-7. 创建完成后，点 **Connect Project**
-8. 选 `founder-notes` 项目，点 **Connect**
-9. ✅ KV 的 4 个环境变量会**自动注入**到你的项目
+1. 项目页 → **Storage** → **Create Database**
+2. 选 **KV (Redis)**
+3. Database Name: `founder-notes-kv`
+4. Region: 选离你最近的
+5. 点 **Create**
+6. 点 **Connect Project** → 选 `founder-notes` → **Connect**
 
 ---
 
 ## Step 4：配置环境变量（5 分钟）
 
-1. 在 Vercel 项目页，点 **Settings → Environment Variables**
-2. 添加以下 4 个变量（**每个变量都要点 Add 添加**）：
+Settings → Environment Variables，添加以下 **5 个变量**：
 
-### 变量 1：Anthropic API Key
-- **Name**: `ANTHROPIC_API_KEY`
-- **Value**: `sk-ant-xxxxx...`（你的 Claude API Key）
-- **Environments**: 勾选 Production、Preview、Development（全选）
-- 点 **Save**
+| Name | Value | 说明 |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | `sk-ant-xxx...` | 你的 Claude Key |
+| `ADMIN_PASSWORD` | 你的强密码 | 管理后台密码 ⚠️ 自己记好 |
+| `DAILY_IP_LIMIT` | `10` | 每 IP 每天文字生成次数 |
+| `DAILY_GLOBAL_LIMIT` | `100` | 全局每天文字生成上限 |
+| `DAILY_EXTRACT_IP_LIMIT` | `5` | **新增**：每 IP 每天图片提取次数 |
 
-### 变量 2：管理员密码 🔐
-- **Name**: `ADMIN_PASSWORD`
-- **Value**: 设置一个**强密码**（至少 12 位，字母+数字+符号）
-  - 例子：`MyAdmin#Notes2026!xyz`
-  - ⚠️ **写下来记好，丢了进不去管理后台**
-- **Environments**: 全选
-- 点 **Save**
-
-### 变量 3：每 IP 每日限制
-- **Name**: `DAILY_IP_LIMIT`
-- **Value**: `10`
-- 全选环境，Save
-
-### 变量 4：全局每日限制
-- **Name**: `DAILY_GLOBAL_LIMIT`
-- **Value**: `100`
-- 全选环境，Save
+每个变量都要勾选 **Production / Preview / Development**（全选）后 Save。
 
 ---
 
-## Step 5：重新部署（让环境变量生效）
+## Step 5：重新部署生效
 
-1. 在 Vercel 项目页，点 **Deployments**
-2. 找到最新的部署，点右边的 **⋯ (三个点)**
-3. 点 **Redeploy**
-4. 弹窗里勾选 **Use existing Build Cache**
-5. 点 **Redeploy**
-6. 等 30 秒部署完成
+1. Deployments → 最新的部署 → **⋯** → **Redeploy**
+2. 勾选 **Use existing Build Cache** → **Redeploy**
+3. 等 30 秒
 
 ---
 
-## Step 6：测试上线效果（5 分钟)
+## Step 6：测试 6 项功能（10 分钟）
 
-### 测试 1：用户端
-1. 访问你的 Vercel 网址：`https://你的项目名-xxx.vercel.app`
-2. 在输入框填一段话
+### 用户端
+访问 `https://你的项目-xxx.vercel.app`
+
+#### ✅ 测试 1：文字输入
+1. 默认 Tab 是「📝 文字」
+2. 写一段想法
 3. 点 **✨ 一键生成全套**
-4. ✅ 应该看到 AI 流式输出，生成完整笔记 + 小红书发布包
+4. 看到 AI 流式输出 → 自动排版 → 显示发布文案
 
-### 测试 2：管理员端
-1. 访问：`https://你的项目名-xxx.vercel.app/admin`
-2. 输入你刚才设置的管理员密码
-3. ✅ 应该能看到：
+#### ✅ 测试 2：图片输入
+1. 切到「🖼️ 图片」Tab
+2. 上传 1-2 张文字截图
+3. 点 **🔍 从图片提取文字**
+4. 等 10-20 秒
+5. 文字应该自动填到「📝 文字」Tab
+6. 检查无误后点 **✨ 一键生成全套**
+
+#### ✅ 测试 3：语音输入（用 Chrome）
+1. 切到「🎤 语音」Tab
+2. 点麦克风按钮
+3. 浏览器问"允许麦克风"→ 允许
+4. 说一段话（中文）
+5. 看到实时识别
+6. 再次点击麦克风停止
+7. 文字自动填入文字框
+8. 点 **✨ 一键生成全套**
+
+#### ✅ 测试 4：限流（可选）
+1. 用同一浏览器连续点 11 次生成
+2. 第 11 次应报错"今日已使用 10/10 次"
+
+#### ✅ 测试 5：图片限流（可选）
+1. 连续点 6 次"图片提取"
+2. 第 6 次应报错"今日图片提取已用 5/5 次"
+
+### 管理端
+访问 `https://你的项目-xxx.vercel.app/admin`
+
+#### ✅ 测试 6：管理后台
+1. 输入你设的管理员密码
+2. ✅ 应该能看到：
    - 今日调用次数
    - 7 天趋势图
-   - IP 排行
-   - 请求记录列表
-4. 点任意一条记录 → 看到详细的输入/输出内容
-
-### 测试 3：限流（可选）
-1. 用同一个浏览器连续点 11 次生成
-2. ✅ 第 11 次应该报错"你今日已使用 10/10 次"
+   - IP 排行（含图片调用）
+   - 请求记录列表（类型区分 generate / extract-images）
+3. 点任意记录看详情
+4. 点 **📥 导出 CSV** 下载完整数据
 
 ---
 
 ## 🎉 上线成功！
 
-你的网址是：
+### 你的两个网址
 ```
-用户端：https://你的项目名-xxx.vercel.app
-管理后台：https://你的项目名-xxx.vercel.app/admin
+用户工具：https://你的项目-xxx.vercel.app
+管理后台：https://你的项目-xxx.vercel.app/admin
 ```
 
-把用户端网址发给朋友，让他们试用。
+### 三种输入方式
+- 📝 **文字** - 直接打字
+- 🖼️ **图片** - 上传截图，AI 自动 OCR + 理解
+- 🎤 **语音** - Chrome 浏览器原生支持，免费
+
+### 限流策略
+- 文字生成：10 次/IP/天，100 次/全局/天
+- 图片提取：5 次/IP/天（额外配额）
+- 语音输入：无限制（不调用 API）
 
 ---
 
-## 📊 之后怎么用
+## 💰 成本估算
 
-### 日常监控
-- 每天去管理后台看一眼**今日调用次数**
-- 看 7 天趋势，了解使用频率
-- 看 IP 排行，发现谁在频繁使用
+| 功能 | 每次成本 | 默认配额下月成本 |
+|---|---|---|
+| 文字生成（100次/天） | ~$0.03-0.05 | $90-150/月 |
+| 图片提取（理论上 5x10=50次/天） | ~$0.05-0.10 | $75-150/月 |
+| 语音输入 | $0 | $0 |
+| **总计** | | **$165-300/月** |
 
-### 调整限制（如果需要）
-1. Vercel → Settings → Environment Variables
-2. 修改 `DAILY_IP_LIMIT` 或 `DAILY_GLOBAL_LIMIT`
-3. 重新部署（Step 5 那样）
-
-### 导出用户数据
-- 管理后台点 **📥 导出 CSV**
-- 下载完整的用户记录用于分析
-
-### 防止过度烧钱
-- Anthropic Console 设置**每月预算上限**：https://console.anthropic.com/settings/limits
-- 设置一个邮件提醒，超过 $50/月就发邮件
+**强烈建议**：在 [Anthropic Console](https://console.anthropic.com/settings/limits) 设月度预算上限（比如 $300），超过自动停。
 
 ---
 
 ## 🐛 常见问题
 
-### Q: 用户端报错 "服务未配置"
-**A**: 检查 `ANTHROPIC_API_KEY` 是否正确设置，并重新部署。
+### Q: 图片提取报错 "服务出错"
+**A**: 检查 Anthropic API Key 是否支持 Vision（claude-opus-4-5 支持）。
 
-### Q: 管理后台一直提示密码错误
-**A**: 检查 `ADMIN_PASSWORD` 设置时是否多了空格，重新设置并重新部署。
+### Q: 语音识别没反应
+**A**: 
+- 必须用 Chrome 或 Safari
+- 必须允许麦克风权限
+- 不支持 Firefox
 
-### Q: 限流不生效
-**A**: 检查 Vercel KV 是否成功连接到项目（Storage 页面应该显示 Connected）。
+### Q: 图片提取很慢
+**A**: 正常，每张图约 3-5 秒，5 张图 15-25 秒。
 
-### Q: 想绑定自己的域名
-**A**: Vercel → Settings → Domains → 添加你的域名 → 按提示配置 DNS。
+### Q: 想关闭图片功能
+**A**: 把 `DAILY_EXTRACT_IP_LIMIT` 设为 `0`，重新部署。
 
-### Q: 不想让别人发现 /admin 怎么办
-**A**: 改 `admin.html` 文件名为复杂随机串，比如 `mgmt-xyz-secret-2026.html`。访问时用这个新名字。
-
-### Q: 想限制只有特定人能用怎么办
-**A**: 在 `api/generate.js` 加一个"邀请码"参数检查。需要的话告诉我，我帮你加。
-
----
-
-## 🚀 升级路线（未来）
-
-当你有一定用户后，可以这样升级：
-
-### 阶段 1：开放试用（现在）
-- 无登录、限流防滥用
-- 适合 5-20 个朋友试用
-
-### 阶段 2：加邀请码（1-2 周后）
-- 加一个邀请码字段
-- 你给精选用户发邀请码
-- 防止陌生人滥用
-
-### 阶段 3：加登录（1-2 月后）
-- 用 Clerk / Auth.js 加 Google 登录
-- 每个用户独立计数
-- 用户能看到自己的历史记录
-
-### 阶段 4：加付费墙（数据好的话）
-- 用 Stripe 加订阅
-- 免费用户 3 次/天，付费 100 次/天
-- 真正做成 SaaS
-
-每一步我都可以帮你做，记得回来找我。
+### Q: 用户上传的图片会被保存吗？
+**A**: **不会**。图片只在内存中传给 Claude，不存数据库。但**提取出的文字会保存到日志**（用于改进产品）。
 
 ---
 
-## 📞 出问题怎么办
+## 🔒 隐私 + 安全
 
-1. 看 Vercel **Deployments → Logs** 找错误信息
-2. 看浏览器 **F12 → Console** 找错误
-3. 把错误截图发给我，我帮你排查
+- ✅ API Key 只在服务端，永不暴露
+- ✅ 图片不被保存（只传给 Claude 一次性使用）
+- ✅ 提取的文字 + 生成的内容会保存 90 天（用于改进）
+- ✅ 管理员密码加密对比
+- ✅ 双重限流防滥用
+
+---
+
+## 🚀 部署后下一步
+
+1. **本地测试一遍**：自己用每个功能至少一次
+2. **发给铁朋友试用**：3-5 个人
+3. **看一周数据**：管理后台看使用模式
+4. **基于数据迭代**：
+   - 数据好 → 加邀请码 / 付费
+   - 数据一般 → 优化产品
+   - 都可以来找我继续做
 
 祝上线顺利！🎉

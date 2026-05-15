@@ -1,4 +1,4 @@
-// /api/admin-stats.js - 管理员查看用户数据
+// /api/admin-stats.js - 管理员后台
 import { kv } from '@vercel/kv';
 
 function getTodayKey() {
@@ -6,7 +6,6 @@ function getTodayKey() {
 }
 
 export default async function handler(req, res) {
-  // 验证密码
   const auth = req.headers.authorization || req.query.password;
   const password = auth ? (auth.startsWith('Bearer ') ? auth.slice(7) : auth) : '';
   
@@ -18,33 +17,33 @@ export default async function handler(req, res) {
     const action = req.query.action || 'overview';
     
     if (action === 'overview') {
-      // 概览：总数、今日数、限额
       const today = getTodayKey();
       const todayCount = (await kv.get(`rate:global:${today}`)) || 0;
+      const todayExtractCount = (await kv.get(`rate:extract:global:${today}`)) || 0;
       const globalLimit = parseInt(process.env.DAILY_GLOBAL_LIMIT || '100');
       const ipLimit = parseInt(process.env.DAILY_IP_LIMIT || '10');
+      const extractIpLimit = parseInt(process.env.DAILY_EXTRACT_IP_LIMIT || '5');
       
-      // 获取最近 7 天每日计数
       const dailyCounts = [];
       for (let i = 0; i < 7; i++) {
         const d = new Date();
         d.setDate(d.getDate() - i);
         const dateKey = d.toISOString().slice(0, 10);
         const count = (await kv.get(`rate:global:${dateKey}`)) || 0;
-        dailyCounts.push({ date: dateKey, count });
+        const extractCount = (await kv.get(`rate:extract:global:${dateKey}`)) || 0;
+        dailyCounts.push({ date: dateKey, count, extractCount });
       }
       
-      // 总日志数（用 list length 估算）
       let totalLogs = 0;
-      try {
-        totalLogs = await kv.llen('log-index:all') || 0;
-      } catch (e) {}
+      try { totalLogs = await kv.llen('log-index:all') || 0; } catch (e) {}
       
       return res.status(200).json({
-        today: today,
+        today,
         todayCount,
+        todayExtractCount,
         globalLimit,
         ipLimit,
+        extractIpLimit,
         todayRemaining: Math.max(0, globalLimit - todayCount),
         dailyCounts,
         totalLogs
@@ -52,10 +51,8 @@ export default async function handler(req, res) {
     }
     
     if (action === 'logs') {
-      // 最近的日志
       const limit = parseInt(req.query.limit || '50');
       const offset = parseInt(req.query.offset || '0');
-      
       const indexKey = req.query.date ? `log-index:${req.query.date}` : 'log-index:all';
       const ids = await kv.lrange(indexKey, offset, offset + limit - 1) || [];
       
@@ -67,18 +64,13 @@ export default async function handler(req, res) {
             const parsed = typeof data === 'string' ? JSON.parse(data) : data;
             logs.push({ id, ...parsed });
           }
-        } catch (e) {
-          console.error('Parse log error:', e);
-        }
+        } catch (e) {}
       }
-      
       return res.status(200).json({ logs, total: ids.length });
     }
     
     if (action === 'ips') {
-      // 按 IP 统计
       const today = getTodayKey();
-      // 扫描所有 IP 计数
       const ipsData = [];
       try {
         let cursor = 0;
@@ -89,51 +81,42 @@ export default async function handler(req, res) {
           for (const key of keys) {
             const ip = key.split(':')[2];
             const count = (await kv.get(key)) || 0;
-            ipsData.push({ ip, count });
+            const extractCount = (await kv.get(`rate:extract:ip:${ip}:${today}`)) || 0;
+            ipsData.push({ ip, count, extractCount });
           }
         } while (cursor !== 0);
-      } catch (e) {
-        console.error('Scan error:', e);
-      }
-      
-      ipsData.sort((a, b) => b.count - a.count);
+      } catch (e) { console.error('Scan error:', e); }
+      ipsData.sort((a, b) => (b.count + b.extractCount) - (a.count + a.extractCount));
       return res.status(200).json({ ips: ipsData });
     }
     
     if (action === 'export') {
-      // 导出 CSV
       const ids = await kv.lrange('log-index:all', 0, 9999) || [];
-      const rows = [['时间', 'IP', '用户代理', '输入', '输出预览', '耗时(ms)', '输入Token', '输出Token', '估算成本($)']];
-      
+      const rows = [['时间', 'IP', '类型', '图片数', '输入', '输出预览', '耗时(ms)', '输入Token', '输出Token', '估算成本($)']];
       for (const id of ids) {
         try {
           const data = await kv.get(`log:${id}`);
           if (data) {
             const log = typeof data === 'string' ? JSON.parse(data) : data;
             rows.push([
-              log.timestamp || '',
-              log.ip || '',
-              (log.userAgent || '').slice(0, 50),
+              log.timestamp || '', log.ip || '',
+              log.type || 'generate',
+              log.imageCount || 0,
               (log.userInput || '').replace(/[\n\r,"]/g, ' ').slice(0, 500),
               (log.output || '').replace(/[\n\r,"]/g, ' ').slice(0, 500),
-              log.duration || 0,
-              log.inputTokens || 0,
-              log.outputTokens || 0,
+              log.duration || 0, log.inputTokens || 0, log.outputTokens || 0,
               log.estimatedCost || '0'
             ]);
           }
         } catch (e) {}
       }
-      
       const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', `attachment; filename=logs-${getTodayKey()}.csv`);
-      // BOM for Excel
       return res.status(200).send('\uFEFF' + csv);
     }
     
     return res.status(400).json({ error: 'Unknown action' });
-    
   } catch (error) {
     console.error('Admin error:', error);
     return res.status(500).json({ error: error.message });
