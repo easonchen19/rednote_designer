@@ -339,18 +339,37 @@
   .cta .small-tag { color: #d4a85a; font-size: 11px; letter-spacing: 3px; font-weight: 600; }
   .cta .big-title { margin-top: 14px; font-size: 38px; font-weight: 900; line-height: 1.2; color: #fff; }
   .cta .big-title .gold { color: #f5d98a; }
-  .cta .summary-box { margin-top: 28px; padding: 20px 18px; background: rgba(212, 168, 90, 0.06); border: 1px solid rgba(212, 168, 90, 0.3); border-radius: 6px; }
-  .cta .summary-box .summary-title { color: #d4a85a; font-size: 12px; letter-spacing: 1px; margin-bottom: 10px; font-weight: 700; }
-  .cta .summary-box ul { list-style: none; padding: 0; margin: 0; }
-  .cta .summary-box li { color: #e0e0e0; font-size: 14px; line-height: 1.7; padding: 4px 0 4px 18px; position: relative; }
-  .cta .summary-box li::before { content: ''; position: absolute; left: 0; top: 14px; width: 10px; height: 1px; background: #d4a85a; }
-  .cta .summary-box li strong { color: #f5d98a; font-weight: 700; }
-  .cta .summary-box li em { color: #f5d98a; font-style: normal; }
+  .cta .summary-prose { margin-top: 28px; color: #e0e0e0; font-size: 15px; line-height: 1.7; letter-spacing: 0.4px; padding-left: 14px; border-left: 2px solid rgba(212, 168, 90, 0.5); }
+  .cta .summary-prose strong { color: #f5d98a; font-weight: 700; }
+  .cta .summary-prose em { color: #f5d98a; font-style: normal; }
   .cta .cta-line { margin-top: auto; padding-top: 28px; color: #f5d98a; font-size: 16px; line-height: 1.6; white-space: pre-line; }
   .cta .follow-line { margin-top: 20px; color: #d4a85a; font-size: 13px; text-align: center; letter-spacing: 1px; padding: 10px; border: 1px solid #d4a85a; border-radius: 40px; }
   
   .loading { display: inline-block; width: 14px; height: 14px; border: 2px solid #d4a85a; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 6px; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* === Responsive: tablet & mobile === */
+  @media (max-width: 900px) {
+    body { overflow: auto; height: auto; min-height: 100vh; }
+    .app { flex-direction: column; height: auto; min-height: 100vh; }
+    .editor { width: 100%; border-right: none; border-bottom: 1px solid #ddd; overflow-y: visible; padding: 16px; }
+    .preview { width: 100%; padding: 16px 12px; overflow-y: visible; }
+    .preview-actions { position: static; margin: 0 0 12px 0; padding: 0; border-bottom: none; }
+  }
+  @media (max-width: 500px) {
+    .header h1 { font-size: 18px; }
+    /* Scale fixed-size .page cards down to fit viewport, preserve layout for html2canvas export */
+    .page {
+      --page-scale: calc((100vw - 24px) / 450);
+      transform: scale(var(--page-scale));
+      transform-origin: top center;
+      margin-bottom: calc(20px - (1 - var(--page-scale)) * 600px);
+    }
+    /* Re-center after scale collapses width */
+    .page-label { font-size: 10px; }
+  }
+  /* When exporting via html2canvas, JS adds .exporting to body to neutralize scale */
+  body.exporting .page { transform: none !important; margin-bottom: 20px !important; }
 </style>
 </head>
 <body>
@@ -475,9 +494,7 @@ Founder
     <div class="input-group"><label>大标题</label><textarea id="cta-title" rows="3">**三条**路径，
 你要先选
 **活下来**那条</textarea></div>
-    <div class="input-group"><label>核心结论</label><textarea id="cta-summary" rows="3">融资节奏要慢，烧钱节奏要快
-seed 阶段不验证 PMF，永远在自欺欺人
-Bridge 轮不是续命，是埋葬</textarea></div>
+    <div class="input-group"><label>结尾总结（2-3 句，自然口吻）</label><textarea id="cta-summary" rows="3">融资节奏要慢，烧钱节奏要快。如果 seed 阶段还没验证 PMF，bridge 轮往往不是续命，而是埋葬。</textarea></div>
     <div class="input-group"><label>CTA 文案</label><textarea id="cta-text" rows="3">如果你正在 seed 阶段，
 纠结要不要再融一轮，
 可以私信我聊聊。</textarea></div>
@@ -1439,7 +1456,7 @@ Bridge 轮不是续命，是埋葬</textarea></div>
     if (!text) return '';
     let html = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
-    return html.replace(/\n+/g, '\n').replace(/\n/g, '<br>');
+    return html.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
   }
   function parseMarkdownGold(text) {
     if (!text) return '';
@@ -1516,7 +1533,8 @@ Bridge 轮不是续命，是埋葬</textarea></div>
     const ctaSummary = document.getElementById('cta-summary').value.split('\n').filter(x => x.trim());
     const ctaText = document.getElementById('cta-text').value;
     const followText = document.getElementById('follow-text').value;
-    html += `<div class="page-label">结尾 · ${pageNum}/${total}</div><div class="page cta" data-page="${String(pageNum).padStart(2, '0')}_cta"><div class="small-tag">${escapeHtml(ctaTag)}</div><div class="big-title">${parseMarkdownGold(ctaTitle)}</div><div class="summary-box"><div class="summary-title">总结</div><ul>${ctaSummary.map(item => `<li>${parseMarkdown(item)}</li>`).join('')}</ul></div><div class="cta-line">${escapeHtml(ctaText)}</div><div class="follow-line">${escapeHtml(followText)}</div></div>`;
+    const summaryProse = ctaSummary.join(' ');
+    html += `<div class="page-label">结尾 · ${pageNum}/${total}</div><div class="page cta" data-page="${String(pageNum).padStart(2, '0')}_cta"><div class="small-tag">${escapeHtml(ctaTag)}</div><div class="big-title">${parseMarkdownGold(ctaTitle)}</div><div class="summary-prose">${parseMarkdown(summaryProse)}</div><div class="cta-line">${escapeHtml(ctaText)}</div><div class="follow-line">${escapeHtml(followText)}</div></div>`;
     output.innerHTML = html;
   }
   
@@ -1524,6 +1542,7 @@ Bridge 轮不是续命，是埋葬</textarea></div>
     const btn = document.getElementById('download-btn');
     btn.disabled = true;
     btn.innerHTML = '<span class="loading"></span>正在生成图片...';
+    document.body.classList.add('exporting');
     try {
       const pages = document.querySelectorAll('#pages-output .page');
       const zip = new JSZip();
@@ -1550,6 +1569,8 @@ Bridge 轮不是续命，是埋葬</textarea></div>
       btn.innerHTML = '❌ 下载失败';
       btn.disabled = false;
       setTimeout(() => { btn.innerHTML = '📦 一键下载所有图片（ZIP）'; }, 2000);
+    } finally {
+      document.body.classList.remove('exporting');
     }
   }
   

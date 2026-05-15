@@ -114,8 +114,8 @@ const SYSTEM_PROMPT = `你是一个专业的内容排版师，不是创作者。
 
 <cta_tag>BOTTOM LINE</cta_tag>
 <cta_title>**关键词**（从原文提炼的核心观点）</cta_title>
-<cta_summary>从原文提炼 3 条核心结论
-每条 < 25 字</cta_summary>
+<cta_summary>用 2-3 句自然流畅的话总结全文核心
+不要分条、不要 1/2/3，像和朋友聊完后的收尾</cta_summary>
 <cta_text>软广文案（如"如果你也在 X，可以聊聊"）</cta_text>
 </note>
 
