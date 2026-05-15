@@ -1246,73 +1246,149 @@ Bridge 轮不是续命，是埋葬</textarea></div>
     body: '上个月在 SoMa 跟一个 Founder 喝咖啡。他 *2024 年 3 月*拿了 seed，估值 *$12M*，团队 *7 个人*。\n\n现在产品上线 14 个月，**MRR $8K**，增长卡住了。\n\n他问我要不要再融一轮 bridge。我说**先别融，先看你的钱还能撑几个月**。'
   }];
   
+  // ⭐ 改进的测量函数：用专门的测量样式，避免 overflow:hidden 影响
   function measureBodyOnly(text, isFirstPage, chapter) {
     const container = document.getElementById('measure-container');
-    container.innerHTML = `<div class="page content" style="width: 450px;"><div class="chapter-tag">${escapeHtml(chapter.label || '')}</div>${isFirstPage && chapter.title ? `<div class="chapter-title">${parseMarkdownGold(chapter.title)}</div>` : ''}${isFirstPage && chapter.quote ? `<div class="quote-box">${parseMarkdown(chapter.quote)}</div>` : ''}<div class="body-text">${parseMarkdown(text)}</div></div>`;
-    const page = container.querySelector('.page');
-    const tag = page.querySelector('.chapter-tag');
-    const title = page.querySelector('.chapter-title');
-    const quote = page.querySelector('.quote-box');
-    const body = page.querySelector('.body-text');
+    // 关键：测量时不要 flex:1 和 overflow:hidden，用单独的测量样式
+    container.innerHTML = `
+      <div style="width: 450px; padding: 42px 36px 70px 36px; box-sizing: border-box; font-family: -apple-system, 'PingFang SC', serif;">
+        <div class="chapter-tag" style="display: inline-block; padding: 4px 12px; font-size: 14px; line-height: 1.4;">${escapeHtml(chapter.label || '')}</div>
+        ${isFirstPage && chapter.title ? `<div class="chapter-title" style="margin-top: 16px; font-size: 28px; font-weight: 800; line-height: 1.3;">${parseMarkdownGold(chapter.title)}</div>` : ''}
+        ${isFirstPage && chapter.quote ? `<div class="quote-box" style="margin-top: 22px; padding: 14px 16px; font-size: 15px; line-height: 1.65;">${parseMarkdown(chapter.quote)}</div>` : ''}
+        <div class="measure-body" style="margin-top: 20px; font-size: 15px; line-height: 2.0; letter-spacing: 0.6px; white-space: pre-wrap; word-wrap: break-word;">${parseMarkdown(text)}</div>
+      </div>
+    `;
+    const wrapper = container.firstElementChild;
+    const tag = wrapper.querySelector('.chapter-tag');
+    const title = wrapper.querySelector('.chapter-title');
+    const quote = wrapper.querySelector('.quote-box');
+    const body = wrapper.querySelector('.measure-body');
+    
     let height = 0;
     if (tag) height += tag.offsetHeight;
     if (title) height += 16 + title.offsetHeight;
     if (quote) height += 22 + quote.offsetHeight;
-    if (body) height += 20 + body.offsetHeight;
+    if (body) height += 20 + body.offsetHeight;  // body.offsetHeight 现在是真实高度
+    
     return height;
   }
   
+  // ⭐ 重写：简单可靠的分页逻辑
+  // 思路：把 body 按"段落 → 句子 → 单字"逐层切分，确保每页填满但不溢出
   function splitChapterIntoPages(chapter) {
     const body = chapter.body || '';
-    const paragraphs = body.split(/\n\s*\n/).filter(p => p.trim());
-    if (paragraphs.length === 0) return [{ ...chapter, body: '', isFirst: true, isLast: true, pageInChapter: 1, totalInChapter: 1 }];
+    if (!body.trim()) {
+      return [{ ...chapter, body: '', isFirst: true, isLast: true, pageInChapter: 1, totalInChapter: 1 }];
+    }
+    
+    // 测整页是否够：如果够就一页搞定
     const wholeHeight = measureBodyOnly(body, true, chapter);
-    if (wholeHeight <= PAGE_INNER_HEIGHT) return [{ ...chapter, body, isFirst: true, isLast: true, pageInChapter: 1, totalInChapter: 1 }];
+    if (wholeHeight <= PAGE_INNER_HEIGHT) {
+      return [{ ...chapter, body, isFirst: true, isLast: true, pageInChapter: 1, totalInChapter: 1 }];
+    }
+    
+    // 把内容按"段落"切分（双换行或单换行都算）
+    // 如果整个 body 没有换行，按句号切
+    let units;
+    if (body.includes('\n')) {
+      units = body.split(/\n+/).filter(p => p.trim());  // ⭐ 接受任意换行
+    } else {
+      // 没有换行，按句号切
+      units = body.split(/(?<=[。！？\?\!])/).filter(s => s.trim());
+    }
+    
     const pages = [];
-    let currentParas = [];
+    let currentUnits = [];
     let isFirstPage = true;
-    for (let i = 0; i < paragraphs.length; i++) {
-      const para = paragraphs[i];
-      const tentative = [...currentParas, para].join('\n\n');
-      const tentativeChapter = isFirstPage ? chapter : { ...chapter, title: '', quote: '' };
-      const height = measureBodyOnly(tentative, isFirstPage, tentativeChapter);
-      if (height <= PAGE_INNER_HEIGHT) currentParas.push(para);
-      else {
-        if (currentParas.length > 0) {
-          pages.push({ ...(isFirstPage ? chapter : { ...chapter, title: '', quote: '' }), body: currentParas.join('\n\n'), isFirst: isFirstPage });
-          isFirstPage = false;
-          currentParas = [para];
-          const singleHeight = measureBodyOnly(para, false, { ...chapter, title: '', quote: '' });
-          if (singleHeight > PAGE_INNER_HEIGHT) {
-            const sentences = para.split(/(?<=[。！？])/).filter(s => s.trim());
-            currentParas = [];
-            let currentSentences = [];
+    
+    const flushPage = () => {
+      if (currentUnits.length > 0) {
+        const pageChapter = isFirstPage 
+          ? chapter 
+          : { ...chapter, title: '', quote: '' };
+        pages.push({ 
+          ...pageChapter, 
+          body: currentUnits.join('\n\n'), 
+          isFirst: isFirstPage 
+        });
+        isFirstPage = false;
+        currentUnits = [];
+      }
+    };
+    
+    const measureCurrent = (unitsToTest) => {
+      const tentativeChapter = isFirstPage 
+        ? chapter 
+        : { ...chapter, title: '', quote: '' };
+      return measureBodyOnly(unitsToTest.join('\n\n'), isFirstPage, tentativeChapter);
+    };
+    
+    for (let i = 0; i < units.length; i++) {
+      const unit = units[i];
+      const tentative = [...currentUnits, unit];
+      const height = measureCurrent(tentative);
+      
+      if (height <= PAGE_INNER_HEIGHT) {
+        // 还能塞下，加进去
+        currentUnits.push(unit);
+      } else {
+        // 塞不下了
+        if (currentUnits.length === 0) {
+          // 这个 unit 本身太长，需要按句子切
+          const sentences = unit.split(/(?<=[。！？\?\!])/).filter(s => s.trim());
+          if (sentences.length > 1) {
+            let sentBuffer = [];
             for (const sent of sentences) {
-              const tentSent = [...currentSentences, sent].join('');
-              const sentHeight = measureBodyOnly(tentSent, false, { ...chapter, title: '', quote: '' });
-              if (sentHeight <= PAGE_INNER_HEIGHT) currentSentences.push(sent);
-              else {
-                if (currentSentences.length > 0) {
-                  pages.push({ ...{ ...chapter, title: '', quote: '' }, body: currentSentences.join(''), isFirst: false });
-                  currentSentences = [sent];
+              const test = [...sentBuffer, sent];
+              const sentHeight = measureCurrent(test);
+              if (sentHeight <= PAGE_INNER_HEIGHT) {
+                sentBuffer.push(sent);
+              } else {
+                if (sentBuffer.length > 0) {
+                  currentUnits = sentBuffer;
+                  flushPage();
+                  sentBuffer = [sent];
                 } else {
-                  pages.push({ ...{ ...chapter, title: '', quote: '' }, body: sent, isFirst: false });
-                  currentSentences = [];
+                  // 单个句子还是太长，硬塞
+                  currentUnits = [sent];
+                  flushPage();
+                  sentBuffer = [];
                 }
               }
             }
-            if (currentSentences.length > 0) currentParas = [currentSentences.join('')];
-            else currentParas = [];
+            if (sentBuffer.length > 0) {
+              currentUnits = sentBuffer;
+            }
+          } else {
+            // 单句无法切分，硬塞
+            currentUnits = [unit];
+            flushPage();
           }
         } else {
-          pages.push({ ...(isFirstPage ? chapter : { ...chapter, title: '', quote: '' }), body: para, isFirst: isFirstPage });
-          isFirstPage = false;
-          currentParas = [];
+          // 先保存已有的，再开新页放当前 unit
+          flushPage();
+          currentUnits = [unit];
+          // 检查单个 unit 是否本身太长
+          const singleHeight = measureCurrent([unit]);
+          if (singleHeight > PAGE_INNER_HEIGHT) {
+            // 回退一格，重新走句子切分逻辑
+            i--;
+            currentUnits = [];
+          }
         }
       }
     }
-    if (currentParas.length > 0) pages.push({ ...(isFirstPage ? chapter : { ...chapter, title: '', quote: '' }), body: currentParas.join('\n\n'), isFirst: isFirstPage });
-    return pages.map((p, idx) => ({ ...p, isFirst: idx === 0, isLast: idx === pages.length - 1, pageInChapter: idx + 1, totalInChapter: pages.length }));
+    
+    flushPage();
+    
+    // 标注页码
+    return pages.map((p, idx) => ({ 
+      ...p, 
+      isFirst: idx === 0, 
+      isLast: idx === pages.length - 1, 
+      pageInChapter: idx + 1, 
+      totalInChapter: pages.length 
+    }));
   }
   
   function calculateTotalPages() {
@@ -1386,12 +1462,43 @@ Bridge 轮不是续命，是埋葬</textarea></div>
     const hook = document.getElementById('hook').value;
     const author = document.getElementById('author').value;
     const allPages = [];
+    
+    // ⭐ 调试：打印 chapter 信息
+    console.log(`📚 renderPreview: ${chapters.length} 章`);
+    let totalOriginalChars = 0;
+    let totalDisplayedChars = 0;
+    
     chapters.forEach((ch, chIdx) => {
+      const bodyLen = (ch.body || '').length;
+      totalOriginalChars += bodyLen;
+      console.log(`  章节 ${chIdx + 1}: label="${ch.label}", body 长度 ${bodyLen} 字符`);
       try {
         const pages = splitChapterIntoPages(ch);
+        console.log(`    → 分成 ${pages.length} 页`);
+        let chapterDisplayedChars = 0;
+        pages.forEach((p, pIdx) => {
+          const pageLen = (p.body || '').length;
+          chapterDisplayedChars += pageLen;
+          console.log(`      第 ${pIdx + 1} 页: body 长度 ${pageLen} 字符`);
+        });
+        totalDisplayedChars += chapterDisplayedChars;
+        // 🚨 完整性校验：如果显示的内容少于原始的 95%，警告
+        if (chapterDisplayedChars < bodyLen * 0.95) {
+          console.error(`⚠️ 章节 ${chIdx + 1} 内容丢失！原始 ${bodyLen} 字符，显示 ${chapterDisplayedChars} 字符（丢失 ${bodyLen - chapterDisplayedChars} 字符）`);
+        }
         pages.forEach(p => allPages.push({ ...p, chapterIdx: chIdx }));
-      } catch (e) { console.error(e); }
+      } catch (e) { 
+        console.error('❌ 分页错误:', e); 
+      }
     });
+    console.log(`✅ 共生成 ${allPages.length} 个内容页 + 封面 + CTA = ${allPages.length + 2} 总页`);
+    console.log(`📊 完整性: 原始 ${totalOriginalChars} 字符, 显示 ${totalDisplayedChars} 字符 (${((totalDisplayedChars/totalOriginalChars)*100).toFixed(1)}%)`);
+    
+    // 在 UI 上显示完整性警告
+    if (totalOriginalChars > 0 && totalDisplayedChars < totalOriginalChars * 0.95) {
+      const lossPercent = ((1 - totalDisplayedChars/totalOriginalChars) * 100).toFixed(1);
+      console.error(`🚨 整体内容丢失 ${lossPercent}%！请检查分页逻辑`);
+    }
     const total = allPages.length + 2;
     let pageNum = 1;
     html += `<div class="page-label">封面 · ${pageNum}/${total}</div><div class="page cover" data-page="01_cover"><div class="series">${escapeHtml(series)}</div><div class="title-block">${titleLines.map((line, i) => { const isEn = /^[A-Za-z0-9\s]+$/.test(line.trim()); const colorClass = i < 2 ? '' : 'white'; return `<div class="title-line ${colorClass} ${isEn?'en':''}">${escapeHtml(line) || '&nbsp;'}</div>`; }).join('')}</div><div class="meta">全文 ${escapeHtml(wordCount)}  |  阅读需 ${escapeHtml(readTime)}</div><div class="divider"></div><div class="hook">${escapeHtml(hook).replace(/\n/g, '<br>')}</div><div class="footer"><div class="avatar-row"><div class="avatar"></div><span>${escapeHtml(author)}</span></div><span>${pageNum} / ${total}</span></div></div>`;
