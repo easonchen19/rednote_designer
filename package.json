@@ -1,13 +1,13 @@
 {
   "name": "founder-notes-saas",
-  "version": "1.0.0",
-  "description": "AI-powered Xiaohongshu content generator for Founders",
+  "version": "3.0.0",
+  "description": "AI-powered Xiaohongshu content generator for Founders (Supabase)",
   "type": "module",
   "scripts": {
     "dev": "vercel dev"
   },
   "dependencies": {
-    "@vercel/kv": "^2.0.0"
+    "@supabase/supabase-js": "^2.45.0"
   },
   "engines": {
     "node": ">=18"

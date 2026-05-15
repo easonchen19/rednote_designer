@@ -1,5 +1,11 @@
-// /api/extract-images.js - 图片文字提取（独立 endpoint）
-import { kv } from '@vercel/kv';
+// /api/extract-images.js - 图片文字提取（Supabase 版）
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { auth: { persistSession: false } }
+);
 
 function getClientIp(req) {
   const forwarded = req.headers['x-forwarded-for'];
@@ -11,6 +17,44 @@ function getClientIp(req) {
 
 function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
+}
+
+async function getCount(scope, identifier, date) {
+  const { data, error } = await supabase
+    .from('rate_limits')
+    .select('count')
+    .eq('scope', scope)
+    .eq('identifier', identifier)
+    .eq('date', date)
+    .maybeSingle();
+  if (error) {
+    console.error('Get count error:', error);
+    return 0;
+  }
+  return data?.count || 0;
+}
+
+async function incrementCount(scope, identifier, date) {
+  const { data: existing } = await supabase
+    .from('rate_limits')
+    .select('count')
+    .eq('scope', scope)
+    .eq('identifier', identifier)
+    .eq('date', date)
+    .maybeSingle();
+  
+  if (existing) {
+    await supabase
+      .from('rate_limits')
+      .update({ count: existing.count + 1 })
+      .eq('scope', scope)
+      .eq('identifier', identifier)
+      .eq('date', date);
+  } else {
+    await supabase
+      .from('rate_limits')
+      .insert({ scope, identifier, date, count: 1 });
+  }
 }
 
 export default async function handler(req, res) {
@@ -31,15 +75,13 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '最多 5 张图片' });
     }
     
-    // 图片提取限流：单独计数（占用一次"图片配额"）
     const today = getTodayKey();
-    const ipExtractKey = `rate:extract:ip:${ip}:${today}`;
-    const ipExtractCount = (await kv.get(ipExtractKey)) || 0;
     const EXTRACT_IP_LIMIT = parseInt(process.env.DAILY_EXTRACT_IP_LIMIT || '5');
+    const extractCount = await getCount('extract-ip', ip, today);
     
-    if (ipExtractCount >= EXTRACT_IP_LIMIT) {
+    if (extractCount >= EXTRACT_IP_LIMIT) {
       return res.status(429).json({
-        error: `你今日图片提取已用 ${ipExtractCount}/${EXTRACT_IP_LIMIT} 次，请明天再来`,
+        error: `你今日图片提取已用 ${extractCount}/${EXTRACT_IP_LIMIT} 次，请明天再来`,
         type: 'extract_limit'
       });
     }
@@ -82,7 +124,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-opus-4-5',
-        max_tokens: 8000,  // 图片提取最多 8000 token，足够长文档
+        max_tokens: 8000,
         messages: [{ role: 'user', content: messageContent }]
       })
     });
@@ -99,38 +141,29 @@ export default async function handler(req, res) {
     const outputTokens = data.usage?.output_tokens || 0;
     
     // 增加计数
-    await kv.incr(ipExtractKey);
-    await kv.expire(ipExtractKey, 86400 * 2);
-    await kv.incr(`rate:extract:global:${today}`);
-    await kv.expire(`rate:extract:global:${today}`, 86400 * 2);
+    await incrementCount('extract-ip', ip, today);
+    await incrementCount('extract-global', 'global', today);
     
-    // 日志
+    // 写日志
     const duration = Date.now() - startTime;
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    await kv.set(`log:${id}`, JSON.stringify({
-      timestamp: new Date().toISOString(),
+    await supabase.from('request_logs').insert({
       ip,
-      userAgent: req.headers['user-agent'] || '',
+      user_agent: req.headers['user-agent'] || '',
       type: 'extract-images',
-      imageCount: images.length,
+      image_count: images.length,
       output: extractedText.slice(0, 10000),
-      duration,
-      inputTokens,
-      outputTokens,
-      estimatedCost: (inputTokens * 0.000003 + outputTokens * 0.000015).toFixed(4)
-    }));
-    await kv.expire(`log:${id}`, 86400 * 90);
-    await kv.lpush(`log-index:${today}`, id);
-    await kv.expire(`log-index:${today}`, 86400 * 90);
-    await kv.lpush('log-index:all', id);
-    await kv.ltrim('log-index:all', 0, 999);
+      duration_ms: duration,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      estimated_cost: parseFloat((inputTokens * 0.000003 + outputTokens * 0.000015).toFixed(6))
+    });
     
     return res.status(200).json({
       text: extractedText,
       stats: {
         imageCount: images.length,
         duration,
-        remaining: EXTRACT_IP_LIMIT - ipExtractCount - 1
+        remaining: EXTRACT_IP_LIMIT - extractCount - 1
       }
     });
     

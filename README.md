@@ -1,56 +1,62 @@
-# Founder Notes v2 · 多模态 AI 内容生成器
+# Founder Notes v3 · Supabase 版
 
 一键生成 Will 风格的小红书笔记。
 
-**v2 新功能**：
-- 🖼️ 图片输入（Claude Vision，自动 OCR + 理解）
-- 🎤 语音输入（浏览器原生，免费）
-- 🐛 修复"找不到 <note>" bug（容错解析）
-- 📊 管理后台增加图片调用统计
+**v3 变化**：
+- 🗄️ 数据库从 Vercel KV 换成 Supabase（PostgreSQL）
+- 📈 数据永久保存（不再 90 天过期）
+- 🔍 支持复杂 SQL 查询
+- 🚀 为未来 SaaS 升级铺路（登录、付费、分析）
 
 ## 快速开始
 
-阅读 [DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md) 完成部署。
+阅读 [DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md)。
 
-## 文件结构
+## 项目结构
 
 ```
 .
-├── index.html              # 用户端（3 种输入方式）
+├── index.html              # 用户端（3 种输入：文字/图片/语音）
 ├── admin.html              # 管理员后台
 ├── api/
-│   ├── generate.js         # Claude 代理 + 限流（文字 + 图片输入）
-│   ├── extract-images.js   # 图片提取（独立 endpoint，单独限流）
-│   └── admin-stats.js      # 后台数据接口（含图片统计）
+│   ├── generate.js         # Claude 代理（Supabase 限流 + 日志）
+│   ├── extract-images.js   # 图片提取（独立限流）
+│   └── admin-stats.js      # 后台数据（Supabase 查询）
+├── supabase-schema.sql     # ⭐ 数据库建表脚本
 ├── package.json
 ├── vercel.json
-├── .env.example            # 5 个环境变量模板
-└── DEPLOY_GUIDE.md         # 完整部署文档
+├── .env.example
+└── DEPLOY_GUIDE.md
 ```
 
 ## 环境变量
 
-| 变量名 | 必填 | 默认 | 说明 |
-|---|---|---|---|
-| `ANTHROPIC_API_KEY` | ✅ | - | Claude API Key |
-| `ADMIN_PASSWORD` | ✅ | - | 后台密码 |
-| `DAILY_IP_LIMIT` | ⬜ | 10 | 每 IP 每天文字生成次数 |
-| `DAILY_GLOBAL_LIMIT` | ⬜ | 100 | 全局每天文字生成上限 |
-| `DAILY_EXTRACT_IP_LIMIT` | ⬜ | 5 | 每 IP 每天图片提取次数（新增） |
+| 变量名 | 必填 | 说明 |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | ✅ | Claude API Key |
+| `ADMIN_PASSWORD` | ✅ | 后台密码 |
+| `SUPABASE_URL` | ✅ | Supabase 项目 URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Supabase service_role key |
+| `DAILY_IP_LIMIT` | ⬜ | 默认 10 |
+| `DAILY_GLOBAL_LIMIT` | ⬜ | 默认 100 |
+| `DAILY_EXTRACT_IP_LIMIT` | ⬜ | 默认 5 |
 
-## 三种输入方式
+## 数据库表
 
-| 方式 | 实现 | 成本 | 限流 |
-|---|---|---|---|
-| 📝 文字 | 直接输入 | ~$0.05/次 | 10/IP/天 |
-| 🖼️ 图片 | Claude Vision API | ~$0.05/次（额外） | 5/IP/天 |
-| 🎤 语音 | Web Speech API | $0 | 无 |
+- `rate_limits` - 限流计数
+- `request_logs` - 请求日志（永久保存）
 
-## 安全特性
+## 数据安全
 
-- API Key 只在服务端
-- 图片不被保存（一次性传给 Claude）
-- 提取文字 + 生成内容保存 90 天（改进产品用）
-- 双重限流：IP + 全局
-- 单独的图片提取配额
-- 管理员密码保护
+- ✅ service_role key 只在服务端
+- ✅ RLS 关闭（当前阶段只有后端访问）
+- ✅ 管理员密码保护
+- ✅ 双重限流防滥用
+- ✅ 图片不写入数据库
+
+## 升级路径
+
+未来基于 Supabase 可以加：
+- 用户登录（Supabase Auth）
+- 付费订阅（Stripe + RLS）
+- 数据分析（Supabase Reports）

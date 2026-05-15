@@ -1,5 +1,14 @@
-// /api/generate.js - Claude 代理 + 限流 + 日志（支持图片输入）
-import { kv } from '@vercel/kv';
+// /api/generate.js - Claude 代理 + 限流 + 日志（Supabase 版）
+import { createClient } from '@supabase/supabase-js';
+
+// 创建 Supabase 客户端（使用 service_role key 绕过 RLS）
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: { persistSession: false }
+  }
+);
 
 const SYSTEM_PROMPT = `你是一个小红书爆款内容编辑，专门写"Founder Notes"风格的笔记，并且懂小红书 SEO + 算法推荐。
 
@@ -77,44 +86,67 @@ function getTodayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function checkIpLimit(ip, limit) {
-  const key = `rate:ip:${ip}:${getTodayKey()}`;
-  const count = (await kv.get(key)) || 0;
-  return { allowed: count < limit, current: count, limit };
-}
-
-async function checkGlobalLimit(limit) {
-  const key = `rate:global:${getTodayKey()}`;
-  const count = (await kv.get(key)) || 0;
-  return { allowed: count < limit, current: count, limit };
-}
-
-async function incrementCounters(ip, type = 'generate') {
-  const today = getTodayKey();
-  const ipKey = `rate:ip:${ip}:${today}`;
-  const globalKey = `rate:global:${today}`;
-  const typeKey = `rate:type:${type}:${today}`;
+// 获取限流计数
+async function getCount(scope, identifier, date) {
+  const { data, error } = await supabase
+    .from('rate_limits')
+    .select('count')
+    .eq('scope', scope)
+    .eq('identifier', identifier)
+    .eq('date', date)
+    .maybeSingle();
   
-  await kv.incr(ipKey);
-  await kv.expire(ipKey, 86400 * 2);
-  await kv.incr(globalKey);
-  await kv.expire(globalKey, 86400 * 2);
-  await kv.incr(typeKey);
-  await kv.expire(typeKey, 86400 * 90);
+  if (error) {
+    console.error('Supabase get count error:', error);
+    return 0;
+  }
+  return data?.count || 0;
 }
 
+// 增加限流计数（upsert）
+async function incrementCount(scope, identifier, date) {
+  // 先尝试更新现有记录
+  const { data: existing } = await supabase
+    .from('rate_limits')
+    .select('count')
+    .eq('scope', scope)
+    .eq('identifier', identifier)
+    .eq('date', date)
+    .maybeSingle();
+  
+  if (existing) {
+    const { error } = await supabase
+      .from('rate_limits')
+      .update({ count: existing.count + 1 })
+      .eq('scope', scope)
+      .eq('identifier', identifier)
+      .eq('date', date);
+    if (error) console.error('Supabase update error:', error);
+  } else {
+    const { error } = await supabase
+      .from('rate_limits')
+      .insert({ scope, identifier, date, count: 1 });
+    if (error) console.error('Supabase insert error:', error);
+  }
+}
+
+// 记录请求日志
 async function logRequest(data) {
-  const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  await kv.set(`log:${id}`, JSON.stringify(data));
-  await kv.expire(`log:${id}`, 86400 * 90);
-  
-  const today = getTodayKey();
-  await kv.lpush(`log-index:${today}`, id);
-  await kv.expire(`log-index:${today}`, 86400 * 90);
-  await kv.lpush('log-index:all', id);
-  await kv.ltrim('log-index:all', 0, 999);
-  
-  return id;
+  const { error } = await supabase
+    .from('request_logs')
+    .insert({
+      ip: data.ip,
+      user_agent: data.userAgent,
+      type: data.type,
+      user_input: data.userInput,
+      image_count: data.imageCount || 0,
+      output: data.output,
+      duration_ms: data.duration,
+      input_tokens: data.inputTokens || 0,
+      output_tokens: data.outputTokens || 0,
+      estimated_cost: parseFloat(data.estimatedCost || 0)
+    });
+  if (error) console.error('Log insert error:', error);
 }
 
 export default async function handler(req, res) {
@@ -141,21 +173,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: '最多 5 张图片' });
     }
     
+    const today = getTodayKey();
     const IP_LIMIT = parseInt(process.env.DAILY_IP_LIMIT || '10');
     const GLOBAL_LIMIT = parseInt(process.env.DAILY_GLOBAL_LIMIT || '100');
     
-    const globalCheck = await checkGlobalLimit(GLOBAL_LIMIT);
-    if (!globalCheck.allowed) {
+    // 全局限流检查
+    const globalCount = await getCount('global', 'global', today);
+    if (globalCount >= GLOBAL_LIMIT) {
       return res.status(429).json({
-        error: `今日总使用次数已达上限（${globalCheck.current}/${globalCheck.limit}），请明天再来`,
+        error: `今日总使用次数已达上限（${globalCount}/${GLOBAL_LIMIT}），请明天再来`,
         type: 'global_limit'
       });
     }
     
-    const ipCheck = await checkIpLimit(ip, IP_LIMIT);
-    if (!ipCheck.allowed) {
+    // IP 限流检查
+    const ipCount = await getCount('ip', ip, today);
+    if (ipCount >= IP_LIMIT) {
       return res.status(429).json({
-        error: `你今日已使用 ${ipCheck.current}/${ipCheck.limit} 次，请明天再来`,
+        error: `你今日已使用 ${ipCount}/${IP_LIMIT} 次，请明天再来`,
         type: 'ip_limit'
       });
     }
@@ -169,7 +204,6 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     
-    // 构建 message content（支持图片）
     let messageContent;
     if (hasImages) {
       messageContent = [
@@ -199,7 +233,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: 'claude-opus-4-5',
-        max_tokens: 12000,  // ⭐ 支持中文 3000-5000 字输出（含 XML 标签开销 + 安全余量）
+        max_tokens: 12000,
         system: SYSTEM_PROMPT,
         stream: true,
         messages: [{ role: 'user', content: messageContent }]
@@ -214,7 +248,9 @@ export default async function handler(req, res) {
       return;
     }
     
-    await incrementCounters(ip, 'generate');
+    // 增加计数（成功调用 API 后）
+    await incrementCount('ip', ip, today);
+    await incrementCount('global', 'global', today);
     
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -257,8 +293,8 @@ export default async function handler(req, res) {
     
     const duration = Date.now() - startTime;
     
+    // 异步写日志（不阻塞响应）
     logRequest({
-      timestamp: new Date().toISOString(),
       ip,
       userAgent,
       type: hasImages ? 'generate-with-images' : 'generate',
@@ -268,7 +304,7 @@ export default async function handler(req, res) {
       duration,
       inputTokens,
       outputTokens,
-      estimatedCost: (inputTokens * 0.000003 + outputTokens * 0.000015).toFixed(4)
+      estimatedCost: (inputTokens * 0.000003 + outputTokens * 0.000015).toFixed(6)
     }).catch(err => console.error('Log error:', err));
     
   } catch (error) {
@@ -285,7 +321,7 @@ export const config = {
   maxDuration: 60,
   api: {
     bodyParser: {
-      sizeLimit: '30mb' // 支持图片上传
+      sizeLimit: '30mb'
     }
   }
 };

@@ -1,221 +1,275 @@
-# 🚀 Founder Notes v2 部署指南
+# 🚀 Founder Notes v3 部署指南（Supabase 版）
 
-完整部署到 Vercel 的图文教程，**包含图片提取 + 语音输入新功能**。
+完整部署到 Vercel + Supabase。
 
-预计耗时：**30-45 分钟**（如果你之前部署过 v1，只需 10 分钟更新）
-
----
-
-## 📋 如果你之前部署过 v1，看这里（10 分钟）
-
-直接更新即可，不需要重新部署：
-
-### 步骤
-1. **替换 GitHub 仓库的文件**：
-   - 用本 ZIP 里的 `index.html` 替换旧的
-   - 用本 ZIP 里的 `api/generate.js` 替换旧的
-   - 用本 ZIP 里的 `api/admin-stats.js` 替换旧的
-   - **新增**：上传 `api/extract-images.js`（这是新功能）
-2. **在 Vercel 加一个新环境变量**：
-   - `DAILY_EXTRACT_IP_LIMIT` = `5`（每 IP 每天图片提取 5 次）
-3. **等 Vercel 自动重新部署**（push 后约 30 秒）
-4. 完成！访问网址试试新功能
+预计耗时：
+- **首次部署**：30-45 分钟
+- **从 v2 (KV) 迁移**：15 分钟
 
 ---
 
-## 📋 如果是首次部署，看下面完整流程
+## ⚠️ 在动手前必读：安全提醒
 
-### 准备清单
-- [ ] GitHub 账号
-- [ ] Vercel 账号（免费，用 GitHub 登录）
-- [ ] Anthropic API Key
-- [ ] 一个强管理员密码
+**永远不要把 service_role key 发到任何聊天/邮件**。它能完全控制你的数据库。
 
----
-
-## Step 1：上传代码到 GitHub（10 分钟）
-
-1. 打开 https://github.com/new
-2. Repository name: `founder-notes`
-3. 选 **Private**
-4. 点 **Create repository**
-5. 点 **uploading an existing file**
-6. **解压本 ZIP，把所有文件拖进去**（不要拖外层文件夹本身）
-7. Commit changes
+你的工作流应该是：
+1. 在 Supabase 后台**复制** service_role key
+2. **直接粘贴**到 Vercel 环境变量
+3. 不在任何聊天/截图/笔记中出现
 
 ---
 
-## Step 2：创建 Vercel 项目（5 分钟）
+## 📋 部署清单
 
-1. 打开 https://vercel.com
-2. 用 GitHub 登录
-3. 点 **Add New... → Project**
-4. 找到 `founder-notes`，点 **Import**
-5. 点 **Deploy**
-6. 等部署完成
+### Step 1：在 Supabase 创建表（5 分钟）
 
----
+1. 打开你的 Supabase 项目
+2. 左边菜单点 **SQL Editor**
+3. 点 **New Query**
+4. 复制 `supabase-schema.sql` 的**所有内容**，粘贴
+5. 点右下角 **Run** 按钮
+6. 应该看到 "Success. No rows returned"
+7. 切到 **Table Editor**，应该看到 2 个新表：
+   - ✅ `rate_limits`
+   - ✅ `request_logs`
 
-## Step 3：创建 Vercel KV 数据库（5 分钟）
+### Step 2：获取 Supabase 连接信息（2 分钟）
 
-1. 项目页 → **Storage** → **Create Database**
-2. 选 **KV (Redis)**
-3. Database Name: `founder-notes-kv`
-4. Region: 选离你最近的
-5. 点 **Create**
-6. 点 **Connect Project** → 选 `founder-notes` → **Connect**
+1. Supabase 项目 → **Settings** → **API**
+2. 准备复制两个东西：
+   - **Project URL**（如 `https://xxx.supabase.co`）
+   - **service_role** key（点 "Reveal" 显示，⚠️ 这是机密的）
 
----
+> 💡 **现在先别复制 service_role**，等下面 Step 4 时直接复制粘贴到 Vercel 即可，避免在剪贴板停留。
 
-## Step 4：配置环境变量（5 分钟）
+### Step 3：上传代码到 GitHub（10 分钟）
 
-Settings → Environment Variables，添加以下 **5 个变量**：
+#### 如果是首次部署
+1. https://github.com/new → 创建 `founder-notes` 仓库（Private）
+2. 点 **uploading an existing file**
+3. **解压本 ZIP，把所有文件拖进去**（不要拖外层文件夹）
+4. Commit
 
-| Name | Value | 说明 |
+#### 如果从 v2 迁移
+直接**替换 GitHub 仓库的几个文件**：
+- 替换 `api/generate.js`
+- 替换 `api/extract-images.js`
+- 替换 `api/admin-stats.js`
+- 替换 `package.json`
+- 替换 `admin.html`（如果有更新）
+- **新增** `supabase-schema.sql`
+
+### Step 4：在 Vercel 配置环境变量（10 分钟）
+
+Vercel 项目 → **Settings** → **Environment Variables**
+
+#### 删除旧的（如果存在）
+- ❌ `KV_URL`
+- ❌ `KV_REST_API_URL`
+- ❌ `KV_REST_API_TOKEN`
+- ❌ `KV_REST_API_READ_ONLY_TOKEN`
+
+> 如果是首次部署，可以跳过删除。
+
+#### 添加这些（共 5-6 个）
+
+| 变量 | 值 | 备注 |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | `sk-ant-xxx...` | 你的 Claude Key |
-| `ADMIN_PASSWORD` | 你的强密码 | 管理后台密码 ⚠️ 自己记好 |
-| `DAILY_IP_LIMIT` | `10` | 每 IP 每天文字生成次数 |
-| `DAILY_GLOBAL_LIMIT` | `100` | 全局每天文字生成上限 |
-| `DAILY_EXTRACT_IP_LIMIT` | `5` | **新增**：每 IP 每天图片提取次数 |
+| `ANTHROPIC_API_KEY` | `sk-ant-xxx` | 你的 Claude Key |
+| `ADMIN_PASSWORD` | 你的强密码 | 后台密码 |
+| `SUPABASE_URL` | `https://你的项目.supabase.co` | Supabase Project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | `eyJ...` | **从 Supabase Settings → API → service_role 复制** |
+| `DAILY_IP_LIMIT` | `10` | 可选 |
+| `DAILY_GLOBAL_LIMIT` | `100` | 可选 |
+| `DAILY_EXTRACT_IP_LIMIT` | `5` | 可选 |
 
-每个变量都要勾选 **Production / Preview / Development**（全选）后 Save。
+每个变量勾选 **Production / Preview / Development** 三个环境，Save。
+
+### Step 5：（可选）删除 Vercel KV
+
+如果之前创建过 Vercel KV，现在可以删了：
+1. 项目 → **Storage**
+2. KV 数据库 → **⋯** → **Disconnect**（不会删除数据）
+3. 想彻底删 → **Delete**
+
+### Step 6：重新部署
+
+1. **Deployments** → 最新部署 → **⋯** → **Redeploy**
+2. 等 30 秒
+3. 部署完成
 
 ---
 
-## Step 5：重新部署生效
+## 🧪 部署后测试（5 分钟）
 
-1. Deployments → 最新的部署 → **⋯** → **Redeploy**
-2. 勾选 **Use existing Build Cache** → **Redeploy**
-3. 等 30 秒
+### 测试 1：管理后台诊断
+1. 访问 `https://你的网址/admin`
+2. 输入管理员密码
+3. **点 🔧 诊断按钮**
+4. 应该全是 ✅：
+   ```
+   【数据库】
+   Supabase: ✅ 已连接
+   【环境变量】
+   ANTHROPIC_API_KEY: ✅ 已设置
+   ADMIN_PASSWORD: ✅ 已设置
+   SUPABASE_URL: ✅ 已设置
+   SUPABASE_SERVICE_ROLE_KEY: ✅ 已设置
+   ```
 
----
-
-## Step 6：测试 6 项功能（10 分钟）
-
-### 用户端
-访问 `https://你的项目-xxx.vercel.app`
-
-#### ✅ 测试 1：文字输入
-1. 默认 Tab 是「📝 文字」
+### 测试 2：生成笔记
+1. 访问 `https://你的网址/`
 2. 写一段想法
-3. 点 **✨ 一键生成全套**
-4. 看到 AI 流式输出 → 自动排版 → 显示发布文案
+3. 点 ✨ 生成
+4. 应该正常工作（流式输出 + 自动排版）
 
-#### ✅ 测试 2：图片输入
-1. 切到「🖼️ 图片」Tab
-2. 上传 1-2 张文字截图
-3. 点 **🔍 从图片提取文字**
-4. 等 10-20 秒
-5. 文字应该自动填到「📝 文字」Tab
-6. 检查无误后点 **✨ 一键生成全套**
+### 测试 3：检查数据写入
+1. 打开 Supabase → **Table Editor**
+2. 看 `request_logs` 表 → 应该有 1 条记录
+3. 看 `rate_limits` 表 → 应该有 IP 和 global 计数
 
-#### ✅ 测试 3：语音输入（用 Chrome）
-1. 切到「🎤 语音」Tab
-2. 点麦克风按钮
-3. 浏览器问"允许麦克风"→ 允许
-4. 说一段话（中文）
-5. 看到实时识别
-6. 再次点击麦克风停止
-7. 文字自动填入文字框
-8. 点 **✨ 一键生成全套**
-
-#### ✅ 测试 4：限流（可选）
-1. 用同一浏览器连续点 11 次生成
-2. 第 11 次应报错"今日已使用 10/10 次"
-
-#### ✅ 测试 5：图片限流（可选）
-1. 连续点 6 次"图片提取"
-2. 第 6 次应报错"今日图片提取已用 5/5 次"
-
-### 管理端
-访问 `https://你的项目-xxx.vercel.app/admin`
-
-#### ✅ 测试 6：管理后台
-1. 输入你设的管理员密码
-2. ✅ 应该能看到：
-   - 今日调用次数
-   - 7 天趋势图
-   - IP 排行（含图片调用）
-   - 请求记录列表（类型区分 generate / extract-images）
-3. 点任意记录看详情
-4. 点 **📥 导出 CSV** 下载完整数据
+✅ 全部通过 = 上线成功！
 
 ---
 
-## 🎉 上线成功！
+## 📊 Supabase 数据库结构
 
-### 你的两个网址
-```
-用户工具：https://你的项目-xxx.vercel.app
-管理后台：https://你的项目-xxx.vercel.app/admin
-```
+### `rate_limits` 表（限流计数）
 
-### 三种输入方式
-- 📝 **文字** - 直接打字
-- 🖼️ **图片** - 上传截图，AI 自动 OCR + 理解
-- 🎤 **语音** - Chrome 浏览器原生支持，免费
-
-### 限流策略
-- 文字生成：10 次/IP/天，100 次/全局/天
-- 图片提取：5 次/IP/天（额外配额）
-- 语音输入：无限制（不调用 API）
-
----
-
-## 💰 成本估算
-
-| 功能 | 每次成本 | 默认配额下月成本 |
+| 字段 | 类型 | 说明 |
 |---|---|---|
-| 文字生成（100次/天） | ~$0.03-0.05 | $90-150/月 |
-| 图片提取（理论上 5x10=50次/天） | ~$0.05-0.10 | $75-150/月 |
-| 语音输入 | $0 | $0 |
-| **总计** | | **$165-300/月** |
+| id | bigserial | 主键 |
+| scope | text | `global` / `ip` / `extract-ip` / `extract-global` |
+| identifier | text | IP 地址 或 'global' |
+| date | text | `2026-05-15` |
+| count | integer | 当天次数 |
+| created_at | timestamptz | 创建时间 |
+| updated_at | timestamptz | 更新时间 |
 
-**强烈建议**：在 [Anthropic Console](https://console.anthropic.com/settings/limits) 设月度预算上限（比如 $300），超过自动停。
+### `request_logs` 表（请求日志）
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | bigserial | 主键 |
+| timestamp | timestamptz | 请求时间 |
+| ip | text | 用户 IP |
+| user_agent | text | 浏览器信息 |
+| type | text | `generate` / `generate-with-images` / `extract-images` |
+| user_input | text | 用户输入 |
+| image_count | integer | 图片数 |
+| output | text | AI 输出 |
+| duration_ms | integer | 耗时 |
+| input_tokens | integer | 输入 token |
+| output_tokens | integer | 输出 token |
+| estimated_cost | numeric | 估算成本（美元） |
+
+---
+
+## 💡 Supabase 直接查询数据
+
+在 Supabase Dashboard 里你可以**直接用 SQL 查数据**：
+
+### 查看今天的所有请求
+```sql
+SELECT * FROM request_logs 
+WHERE DATE(timestamp) = CURRENT_DATE 
+ORDER BY timestamp DESC;
+```
+
+### 统计每天的成本
+```sql
+SELECT 
+  DATE(timestamp) as day,
+  COUNT(*) as requests,
+  SUM(estimated_cost) as total_cost
+FROM request_logs 
+GROUP BY DATE(timestamp) 
+ORDER BY day DESC;
+```
+
+### 查看 Top IP 用户
+```sql
+SELECT ip, COUNT(*) as requests, SUM(estimated_cost) as cost
+FROM request_logs
+WHERE timestamp > NOW() - INTERVAL '7 days'
+GROUP BY ip
+ORDER BY requests DESC
+LIMIT 20;
+```
+
+### 清理 90 天前的旧数据
+```sql
+DELETE FROM request_logs 
+WHERE timestamp < NOW() - INTERVAL '90 days';
+```
 
 ---
 
 ## 🐛 常见问题
 
-### Q: 图片提取报错 "服务出错"
-**A**: 检查 Anthropic API Key 是否支持 Vision（claude-opus-4-5 支持）。
+### Q: 诊断显示 "SUPABASE_URL: ❌ 未设置"
+**A**: 检查 Vercel Environment Variables，重新部署。
 
-### Q: 语音识别没反应
+### Q: 报错 "Invalid API key"
+**A**: 用错 key 了。要的是 `service_role` 不是 `anon` / `publishable`。
+
+### Q: 数据库连接失败
 **A**: 
-- 必须用 Chrome 或 Safari
-- 必须允许麦克风权限
-- 不支持 Firefox
+1. 看 Supabase 项目是否处于 "Paused" 状态（免费版超过 1 周不用会暂停，访问一次就恢复）
+2. 检查 Project URL 是否正确
 
-### Q: 图片提取很慢
-**A**: 正常，每张图约 3-5 秒，5 张图 15-25 秒。
+### Q: 数据没写入
+**A**: 
+1. 看 Vercel **Deployments → Logs** 找错误
+2. 在 Supabase **SQL Editor** 执行：`SELECT * FROM request_logs ORDER BY id DESC LIMIT 5;`
+3. 用 Supabase 管理面板手动插一条测试数据
 
-### Q: 想关闭图片功能
-**A**: 把 `DAILY_EXTRACT_IP_LIMIT` 设为 `0`，重新部署。
-
-### Q: 用户上传的图片会被保存吗？
-**A**: **不会**。图片只在内存中传给 Claude，不存数据库。但**提取出的文字会保存到日志**（用于改进产品）。
+### Q: 想要更精确的限流（不是按 IP，而是按用户）
+**A**: 以后做用户登录后再改 — 把 `identifier` 字段从 IP 改成 user_id 即可。
 
 ---
 
-## 🔒 隐私 + 安全
+## 🔒 安全提醒
 
-- ✅ API Key 只在服务端，永不暴露
-- ✅ 图片不被保存（只传给 Claude 一次性使用）
-- ✅ 提取的文字 + 生成的内容会保存 90 天（用于改进）
-- ✅ 管理员密码加密对比
+### 当前设置的安全保障
+- ✅ service_role key 只在 Vercel 服务端，前端永远碰不到
+- ✅ RLS 关闭，但因为只有 service_role 能访问，所以安全
+- ✅ 管理员后台密码保护
 - ✅ 双重限流防滥用
+- ✅ 图片不被保存到数据库
+
+### 如果哪天泄露了 service_role key
+1. 立刻去 Supabase **Settings → API → Rotate service_role key**
+2. 用新 key 更新 Vercel 环境变量
+3. 重新部署
 
 ---
 
-## 🚀 部署后下一步
+## 🚀 未来扩展方向
 
-1. **本地测试一遍**：自己用每个功能至少一次
-2. **发给铁朋友试用**：3-5 个人
-3. **看一周数据**：管理后台看使用模式
-4. **基于数据迭代**：
-   - 数据好 → 加邀请码 / 付费
-   - 数据一般 → 优化产品
-   - 都可以来找我继续做
+Supabase 比 Vercel KV 强大太多，可以做：
 
-祝上线顺利！🎉
+### 阶段 2：用户登录（1-2 个月后）
+- Supabase 自带 Auth（Google / GitHub / Email）
+- 用 `auth.users` 表关联数据
+- 开启 RLS，每个用户只能看自己的数据
+
+### 阶段 3：付费墙
+- 加 `subscriptions` 表
+- 集成 Stripe
+- 不同套餐对应不同限额
+
+### 阶段 4：数据分析
+- 用 Supabase 内置的 Reports
+- 或者接入 Metabase / Grafana
+- 看用户行为、内容偏好
+
+我可以一步一步帮你做。
+
+---
+
+## 🎉 部署完成！
+
+部署成功后告诉我，我们继续做下一步。
+
+祝上线顺利！🚀
