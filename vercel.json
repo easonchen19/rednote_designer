@@ -2,6 +2,9 @@
   "functions": {
     "api/generate.js": {
       "maxDuration": 60
+    },
+    "api/extract-images.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
