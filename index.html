@@ -613,65 +613,84 @@ Founder
     addImages(files);
   });
   
-  // ⭐ 用后端 API 提取图片文字
+  // ⭐ 用后端 API 提取图片文字（分批 + 重试，保证大文件/多图也能成功）
   async function extractFromImages() {
     if (uploadedImages.length === 0) {
       showStatus('请先上传图片', 'error');
       return;
     }
-    
+
     const btn = document.getElementById('btn-extract');
     const progressEl = document.getElementById('extract-progress');
     btn.disabled = true;
     btn.innerHTML = '<span class="loading"></span>AI 看图识字中...';
     progressEl.classList.add('active');
-    progressEl.textContent = `🔍 Claude 正在分析 ${uploadedImages.length} 张图片...`;
-    
-    try {
-      const response = await fetch('/api/extract-images', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          images: uploadedImages.map(img => ({
-            base64: img.base64,
-            mimeType: img.mimeType
-          }))
-        })
-      });
-      
-      if (!response.ok) {
-        let errMsg;
-        try {
-          const data = await response.json();
-          errMsg = data.error || `HTTP ${response.status}`;
-          if (data.hint) errMsg += '\n💡 ' + data.hint;
-          if (data.debug) console.error('详细错误:', data.debug);
-        } catch (e) {
+
+    const BATCH_SIZE = 2;
+    const MAX_RETRIES = 2;
+    const batches = [];
+    for (let i = 0; i < uploadedImages.length; i += BATCH_SIZE) {
+      batches.push(uploadedImages.slice(i, i + BATCH_SIZE));
+    }
+
+    async function callBatch(batchImages, attempt = 0) {
+      try {
+        const response = await fetch('/api/extract-images', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            images: batchImages.map(img => ({ base64: img.base64, mimeType: img.mimeType }))
+          })
+        });
+        if (!response.ok) {
+          // Transient failures: retry with exponential backoff
+          const isTransient = response.status === 504 || response.status === 502 || response.status === 503 || response.status === 529 || response.status === 429;
+          if (isTransient && attempt < MAX_RETRIES) {
+            const delay = 1500 * Math.pow(2, attempt);
+            await new Promise(r => setTimeout(r, delay));
+            return callBatch(batchImages, attempt + 1);
+          }
+          let errMsg;
           try {
-            const text = await response.text();
-            errMsg = `HTTP ${response.status} ${response.statusText}\n响应: ${text.slice(0, 300)}`;
-            console.error('完整响应:', text);
-          } catch (e2) {
+            const data = await response.json();
+            errMsg = data.error || `HTTP ${response.status}`;
+            if (data.hint) errMsg += '\n💡 ' + data.hint;
+          } catch {
             errMsg = `HTTP ${response.status} ${response.statusText}`;
           }
+          throw new Error(errMsg);
         }
-        throw new Error(errMsg);
+        return await response.json();
+      } catch (err) {
+        // Network errors / aborted: also retry
+        if (attempt < MAX_RETRIES && (err.name === 'TypeError' || /network|fetch/i.test(err.message))) {
+          const delay = 1500 * Math.pow(2, attempt);
+          await new Promise(r => setTimeout(r, delay));
+          return callBatch(batchImages, attempt + 1);
+        }
+        throw err;
       }
-      
-      const data = await response.json();
-      const extractedText = data.text;
-      
-      // 自动切换回文字 Tab，填入提取的文字
+    }
+
+    const parts = [];
+    let lastRemaining;
+    try {
+      for (let i = 0; i < batches.length; i++) {
+        progressEl.textContent = `🔍 正在识别第 ${i + 1}/${batches.length} 批（每批最多 ${BATCH_SIZE} 张）...`;
+        const data = await callBatch(batches[i]);
+        if (data?.text) parts.push(data.text);
+        if (data?.stats?.remaining !== undefined) lastRemaining = data.stats.remaining;
+      }
+      const extractedText = parts.join('\n\n').trim();
+      if (!extractedText) throw new Error('未能提取到任何文字');
+
       switchMethod('text');
       document.getElementById('ai-input').value = extractedText;
-      
-      const remaining = data.stats?.remaining;
-      const remainingText = remaining !== undefined ? `（今日图片提取剩余 ${remaining} 次）` : '';
-      progressEl.textContent = `✅ 提取成功！${extractedText.length} 字 ${remainingText}，请检查后点「生成」`;
+      const remainingText = lastRemaining !== undefined ? `（今日图片提取剩余 ${lastRemaining} 次）` : '';
+      progressEl.textContent = `✅ 提取成功！共 ${extractedText.length} 字 ${remainingText}`;
       setTimeout(() => progressEl.classList.remove('active'), 8000);
-      
     } catch (err) {
-      progressEl.textContent = '❌ ' + err.message;
+      progressEl.textContent = '❌ ' + err.message + (parts.length ? `（已成功识别 ${parts.length} 批，请重试或减少图片数量）` : '');
       console.error(err);
     } finally {
       btn.disabled = false;
