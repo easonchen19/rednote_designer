@@ -60,3 +60,4 @@
 - 用户登录（Supabase Auth）
 - 付费订阅（Stripe + RLS）
 - 数据分析（Supabase Reports）
+# rednote_designer
