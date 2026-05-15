@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Admin · Founder Notes</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; font-family: -apple-system, "PingFang SC", sans-serif; background: #1a1410; color: #fff; min-height: 100vh; }
+  
+  .login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .login-box { background: #2a2520; padding: 40px; border-radius: 12px; border: 1px solid #d4a85a; width: 360px; }
+  .login-box h1 { margin: 0 0 20px 0; color: #f5d98a; font-size: 22px; }
+  .login-box input { width: 100%; padding: 12px; background: #1a1410; border: 1px solid #555; border-radius: 6px; color: #fff; font-size: 14px; margin-bottom: 12px; font-family: monospace; }
+  .login-box input:focus { outline: none; border-color: #d4a85a; }
+  .login-box button { width: 100%; padding: 12px; background: linear-gradient(135deg, #d4a85a, #b8862e); color: #1a1410; border: none; border-radius: 6px; font-weight: 700; cursor: pointer; font-size: 14px; }
+  .login-error { color: #ff6b35; font-size: 12px; margin-top: 8px; text-align: center; }
+  
+  .dashboard { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+  .dashboard.active { display: block; }
+  
+  .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #444; }
+  .top-bar h1 { margin: 0; color: #f5d98a; font-size: 22px; }
+  .top-bar .actions { display: flex; gap: 10px; }
+  .btn { background: #2a2520; color: #d4a85a; border: 1px solid #d4a85a; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
+  .btn:hover { background: #3a3530; }
+  .btn-primary { background: #d4a85a; color: #1a1410; }
+  
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: #2a2520; border-radius: 12px; padding: 20px; border-left: 3px solid #d4a85a; }
+  .stat-card .label { color: #999; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; }
+  .stat-card .value { color: #f5d98a; font-size: 32px; font-weight: 700; line-height: 1; }
+  .stat-card .sub { color: #666; font-size: 11px; margin-top: 6px; }
+  .stat-card.warn .value { color: #ff9800; }
+  .stat-card.error .value { color: #f44336; }
+  
+  .section { background: #2a2520; border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .section h2 { margin: 0 0 16px 0; color: #f5d98a; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
+  
+  .chart-bars { display: flex; align-items: flex-end; gap: 8px; height: 120px; padding: 10px 0; }
+  .chart-bar { flex: 1; background: linear-gradient(180deg, #d4a85a, #b8862e); border-radius: 4px 4px 0 0; min-height: 4px; position: relative; }
+  .chart-bar .bar-label { position: absolute; top: -22px; left: 50%; transform: translateX(-50%); color: #f5d98a; font-size: 11px; font-weight: 600; }
+  .chart-bar .bar-date { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); color: #888; font-size: 10px; white-space: nowrap; }
+  
+  .logs-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .logs-table th { background: #1a1410; color: #d4a85a; padding: 10px; text-align: left; font-weight: 600; letter-spacing: 1px; border-bottom: 1px solid #444; }
+  .logs-table td { padding: 10px; border-bottom: 1px solid #333; color: #ccc; vertical-align: top; }
+  .logs-table tr:hover { background: #1f1a15; }
+  .logs-table .col-time { width: 130px; color: #888; font-family: monospace; }
+  .logs-table .col-ip { width: 110px; color: #d4a85a; font-family: monospace; }
+  .logs-table .col-input { max-width: 300px; }
+  .logs-table .col-cost { width: 80px; color: #4caf50; font-family: monospace; }
+  .logs-table .truncate { overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+  
+  .ip-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .ip-row { display: flex; justify-content: space-between; padding: 8px 12px; background: #1a1410; border-radius: 6px; font-family: monospace; font-size: 12px; }
+  .ip-row .ip { color: #d4a85a; }
+  .ip-row .count { color: #f5d98a; font-weight: 700; }
+  
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid #444; margin-bottom: 16px; }
+  .tab { padding: 10px 16px; cursor: pointer; color: #888; border-bottom: 2px solid transparent; font-size: 13px; }
+  .tab.active { color: #f5d98a; border-bottom-color: #d4a85a; }
+  
+  .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center; padding: 20px; }
+  .modal.active { display: flex; }
+  .modal-content { background: #2a2520; border-radius: 12px; padding: 24px; width: 800px; max-width: 100%; max-height: 90vh; overflow-y: auto; border: 1px solid #d4a85a; }
+  .modal h3 { margin: 0 0 16px 0; color: #f5d98a; }
+  .modal .field { margin-bottom: 12px; }
+  .modal .field-label { color: #999; font-size: 11px; letter-spacing: 2px; margin-bottom: 4px; }
+  .modal .field-value { background: #1a1410; padding: 12px; border-radius: 6px; color: #ddd; font-size: 13px; line-height: 1.6; white-space: pre-wrap; word-wrap: break-word; max-height: 300px; overflow-y: auto; }
+  .modal .close-btn { float: right; background: transparent; border: 1px solid #d4a85a; color: #d4a85a; padding: 4px 12px; border-radius: 4px; cursor: pointer; }
+  
+  .empty { text-align: center; padding: 40px; color: #666; }
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="login-screen">
+  <div class="login-box">
+    <h1>🔐 管理员登录</h1>
+    <input type="password" id="password" placeholder="输入管理员密码" autofocus>
+    <button onclick="login()">登录</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<div class="dashboard" id="dashboard">
+  <div class="top-bar">
+    <h1>📊 Founder Notes · Admin</h1>
+    <div class="actions">
+      <button class="btn" onclick="refreshData()">🔄 刷新</button>
+      <button class="btn btn-primary" onclick="exportCSV()">📥 导出 CSV</button>
+      <button class="btn" onclick="logout()">退出</button>
+    </div>
+  </div>
+  
+  <div class="stats-grid" id="stats-grid"></div>
+  
+  <div class="section">
+    <h2>📈 最近 7 天调用趋势</h2>
+    <div class="chart-bars" id="chart-bars"></div>
+  </div>
+  
+  <div class="section">
+    <h2>🌐 今日 IP 排行</h2>
+    <div class="ip-list" id="ip-list"></div>
+  </div>
+  
+  <div class="section">
+    <h2>📝 最近请求记录 <span style="font-size:11px;color:#888;font-weight:normal;">（点击查看详情）</span></h2>
+    <table class="logs-table">
+      <thead>
+        <tr>
+          <th class="col-time">时间</th>
+          <th class="col-ip">IP</th>
+          <th class="col-input">用户输入</th>
+          <th>耗时</th>
+          <th class="col-cost">成本</th>
+        </tr>
+      </thead>
+      <tbody id="logs-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="modal" id="log-modal">
+  <div class="modal-content">
+    <button class="close-btn" onclick="closeModal()">关闭</button>
+    <h3>请求详情</h3>
+    <div class="field">
+      <div class="field-label">时间</div>
+      <div class="field-value" id="modal-time"></div>
+    </div>
+    <div class="field">
+      <div class="field-label">IP / User Agent</div>
+      <div class="field-value" id="modal-meta"></div>
+    </div>
+    <div class="field">
+      <div class="field-label">用户输入</div>
+      <div class="field-value" id="modal-input"></div>
+    </div>
+    <div class="field">
+      <div class="field-label">AI 生成输出</div>
+      <div class="field-value" id="modal-output"></div>
+    </div>
+    <div class="field">
+      <div class="field-label">统计</div>
+      <div class="field-value" id="modal-stats"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let password = '';
+  let logsCache = [];
+  
+  async function login() {
+    const pw = document.getElementById('password').value;
+    if (!pw) {
+      document.getElementById('login-error').textContent = '请输入密码';
+      return;
+    }
+    
+    // 测试密码
+    try {
+      const res = await fetch('/api/admin-stats?action=overview', {
+        headers: { 'Authorization': 'Bearer ' + pw }
+      });
+      if (res.status === 401) {
+        document.getElementById('login-error').textContent = '密码错误';
+        return;
+      }
+      password = pw;
+      sessionStorage.setItem('admin_password', pw);
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('dashboard').classList.add('active');
+      refreshData();
+    } catch (err) {
+      document.getElementById('login-error').textContent = '连接失败: ' + err.message;
+    }
+  }
+  
+  function logout() {
+    sessionStorage.removeItem('admin_password');
+    location.reload();
+  }
+  
+  document.getElementById('password').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') login();
+  });
+  
+  async function fetchAPI(action, params = '') {
+    const res = await fetch(`/api/admin-stats?action=${action}${params}`, {
+      headers: { 'Authorization': 'Bearer ' + password }
+    });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+  }
+  
+  async function refreshData() {
+    try {
+      // 概览
+      const overview = await fetchAPI('overview');
+      renderStats(overview);
+      renderChart(overview.dailyCounts);
+      
+      // IP 列表
+      const ipsData = await fetchAPI('ips');
+      renderIPs(ipsData.ips);
+      
+      // 日志
+      const logsData = await fetchAPI('logs', '&limit=50');
+      logsCache = logsData.logs;
+      renderLogs(logsData.logs);
+    } catch (err) {
+      alert('加载失败: ' + err.message);
+    }
+  }
+  
+  function renderStats(data) {
+    const grid = document.getElementById('stats-grid');
+    const percentage = data.globalLimit > 0 ? Math.round(data.todayCount / data.globalLimit * 100) : 0;
+    const warnClass = percentage > 80 ? 'error' : (percentage > 50 ? 'warn' : '');
+    
+    grid.innerHTML = `
+      <div class="stat-card ${warnClass}">
+        <div class="label">今日调用</div>
+        <div class="value">${data.todayCount}</div>
+        <div class="sub">上限 ${data.globalLimit} · 已用 ${percentage}%</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">今日剩余</div>
+        <div class="value">${data.todayRemaining}</div>
+        <div class="sub">明日自动重置</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">单 IP 限制</div>
+        <div class="value">${data.ipLimit}</div>
+        <div class="sub">次/天/IP</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">累计记录</div>
+        <div class="value">${data.totalLogs}</div>
+        <div class="sub">保留 90 天</div>
+      </div>
+    `;
+  }
+  
+  function renderChart(dailyCounts) {
+    const container = document.getElementById('chart-bars');
+    const reversed = [...dailyCounts].reverse();
+    const max = Math.max(...reversed.map(d => d.count), 1);
+    container.innerHTML = reversed.map(d => {
+      const height = (d.count / max) * 100;
+      return `
+        <div class="chart-bar" style="height: ${height}%">
+          <div class="bar-label">${d.count}</div>
+          <div class="bar-date">${d.date.slice(5)}</div>
+        </div>
+      `;
+    }).join('');
+  }
+  
+  function renderIPs(ips) {
+    const list = document.getElementById('ip-list');
+    if (ips.length === 0) {
+      list.innerHTML = '<div class="empty">今日还没有请求</div>';
+      return;
+    }
+    list.innerHTML = ips.map(ip => `
+      <div class="ip-row">
+        <span class="ip">${ip.ip}</span>
+        <span class="count">${ip.count} 次</span>
+      </div>
+    `).join('');
+  }
+  
+  function renderLogs(logs) {
+    const tbody = document.getElementById('logs-body');
+    if (logs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="empty">还没有任何记录</td></tr>';
+      return;
+    }
+    tbody.innerHTML = logs.map(log => {
+      const time = log.timestamp ? new Date(log.timestamp).toLocaleString('zh-CN', { hour12: false }) : '?';
+      const input = (log.userInput || '').slice(0, 200);
+      const duration = log.duration ? (log.duration / 1000).toFixed(1) + 's' : '?';
+      const cost = log.estimatedCost ? '$' + log.estimatedCost : '?';
+      return `
+        <tr onclick="showLogDetail('${log.id}')" style="cursor:pointer">
+          <td class="col-time">${time}</td>
+          <td class="col-ip">${log.ip || '?'}</td>
+          <td class="col-input"><div class="truncate">${escapeHtml(input)}</div></td>
+          <td>${duration}</td>
+          <td class="col-cost">${cost}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+  
+  function showLogDetail(id) {
+    const log = logsCache.find(l => l.id === id);
+    if (!log) return;
+    
+    document.getElementById('modal-time').textContent = log.timestamp || '?';
+    document.getElementById('modal-meta').textContent = `IP: ${log.ip}\nUA: ${log.userAgent || '?'}`;
+    document.getElementById('modal-input').textContent = log.userInput || '?';
+    document.getElementById('modal-output').textContent = log.output || '?';
+    document.getElementById('modal-stats').textContent = 
+      `耗时: ${log.duration}ms\n` +
+      `输入 Tokens: ${log.inputTokens || 0}\n` +
+      `输出 Tokens: ${log.outputTokens || 0}\n` +
+      `估算成本: $${log.estimatedCost || 0}`;
+    
+    document.getElementById('log-modal').classList.add('active');
+  }
+  
+  function closeModal() {
+    document.getElementById('log-modal').classList.remove('active');
+  }
+  
+  document.getElementById('log-modal').addEventListener('click', (e) => {
+    if (e.target.id === 'log-modal') closeModal();
+  });
+  
+  function exportCSV() {
+    const url = `/api/admin-stats?action=export&password=${encodeURIComponent(password)}`;
+    window.open(url, '_blank');
+  }
+  
+  function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  
+  // 自动登录（如果 session 有密码）
+  const saved = sessionStorage.getItem('admin_password');
+  if (saved) {
+    document.getElementById('password').value = saved;
+    login();
+  }
+</script>
+
+</body>
+</html>

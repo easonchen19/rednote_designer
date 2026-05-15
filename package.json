@@ -1,0 +1,15 @@
+{
+  "name": "founder-notes-saas",
+  "version": "1.0.0",
+  "description": "AI-powered Xiaohongshu content generator for Founders",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@vercel/kv": "^2.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
