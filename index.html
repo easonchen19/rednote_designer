@@ -326,8 +326,8 @@
   .content .quote-box { margin-top: 22px; padding: 14px 16px; background: rgba(212, 168, 90, 0.08); border-left: 3px solid #d4a85a; border-radius: 3px; color: #f5d98a; font-size: 15px; line-height: 1.65; font-style: italic; flex-shrink: 0; }
   .content .quote-box strong { color: #ffd97a; font-weight: 700; font-style: normal; }
   .content .quote-box em { color: #ffd97a; font-style: normal; }
-  .content .body-text { margin-top: 20px; color: #d4d4d4; font-size: 14px; line-height: 1.85; letter-spacing: 0.5px; white-space: pre-wrap; word-wrap: break-word; flex: 1; overflow: hidden; }
-  .content .body-text strong { color: #f5d98a; background: rgba(212, 168, 90, 0.15); padding: 0 3px; font-weight: 600; }
+  .content .body-text { margin-top: 20px; color: #e8e2d4; font-size: 15px; line-height: 2.0; letter-spacing: 0.6px; white-space: pre-wrap; word-wrap: break-word; flex: 1; overflow: hidden; font-weight: 400; }
+  .content .body-text strong { color: #f5d98a; background: rgba(212, 168, 90, 0.18); padding: 1px 5px; font-weight: 600; border-radius: 2px; }
   .content .body-text em { color: #f5d98a; font-style: normal; font-weight: 700; }
   .content .pagination { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 5px; }
   .content .dot { width: 4px; height: 4px; border-radius: 50%; background: #444; }
@@ -1052,11 +1052,14 @@ Bridge 轮不是续命，是埋葬</textarea></div>
       setStep('layout', 'done', `${result.chapters.length} 章 · ${totalPages} 页`);
       stopTimer();
       
-      postData = { title: result.social_title, body: result.social_body, tags: result.social_tags };
+      // ⭐ 容错：如果 social 字段缺失，从笔记内容自动生成
+      const socialPack = generateSocialPackFallback(result);
+      postData = socialPack;
       showPostSection(postData);
       
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-      showStatus(`✅ 完成！用时 ${elapsed}s · ${totalPages} 页 + 发布文案`, 'success');
+      const socialNote = socialPack.isFallback ? '（小红书文案为自动生成）' : '+ 发布文案';
+      showStatus(`✅ 完成！用时 ${elapsed}s · ${totalPages} 页 ${socialNote}`, 'success');
       
       setTimeout(() => document.getElementById('progress-panel').classList.remove('active'), 5000);
     } catch (err) {
@@ -1067,6 +1070,84 @@ Bridge 轮不是续命，是埋葬</textarea></div>
       btn.disabled = false;
       btn.innerHTML = '✨ 一键生成全套';
     }
+  }
+  
+  // ⭐ 容错：如果 AI 没生成 social 包，从笔记内容自动生成
+  function generateSocialPackFallback(result) {
+    const hasTitle = result.social_title && result.social_title.trim();
+    const hasBody = result.social_body && result.social_body.trim();
+    const hasTags = result.social_tags && result.social_tags.length > 0;
+    
+    // 如果三个都有，直接用 AI 生成的
+    if (hasTitle && hasBody && hasTags) {
+      return {
+        title: result.social_title,
+        body: result.social_body,
+        tags: result.social_tags,
+        isFallback: false
+      };
+    }
+    
+    console.warn('⚠️ AI 未完整生成 social 包，使用容错生成', { hasTitle, hasBody, hasTags });
+    
+    // 从笔记标题 + chapter 1 内容自动生成
+    const titleLines = (result.title_lines || []).filter(x => x);
+    const titleText = titleLines.join('');
+    const firstChapter = (result.chapters || [])[0];
+    const ctaTitle = (result.cta_title || '').replace(/\*\*/g, '').replace(/\*/g, '');
+    
+    // 1. 生成 social_title（如果缺失）
+    let socialTitle = result.social_title;
+    if (!hasTitle) {
+      // 用 cta_title 或 hook 第一行 + emoji
+      const hookLines = (result.hook || '').split('\n').filter(x => x.trim());
+      const firstHook = hookLines[0] || '';
+      const candidates = [
+        ctaTitle,
+        firstHook,
+        titleText,
+        firstChapter?.title?.replace(/\*\*/g, '').replace(/\*/g, '') || ''
+      ].filter(x => x && x.length >= 6 && x.length <= 30);
+      
+      const baseTitle = candidates[0] || titleText || 'Founder Notes';
+      // 加 emoji
+      const emojis = ['💸', '🔥', '💀', '⚡', '🎯', '💡', '🌃', '☕'];
+      const emoji = emojis[Math.floor(Math.random() * emojis.length)];
+      socialTitle = `${emoji} ${baseTitle}`;
+      if (socialTitle.length > 22) socialTitle = socialTitle.slice(0, 22);
+    }
+    
+    // 2. 生成 social_body（如果缺失）
+    let socialBody = result.social_body;
+    if (!hasBody) {
+      // 用 hook + 第一章前几句 + 引导互动
+      const hook = (result.hook || '').replace(/\n/g, ' ');
+      const firstBody = firstChapter?.body || '';
+      // 拿第一章前 100 字
+      const cleanFirst = firstBody.replace(/\*\*/g, '').replace(/\*/g, '');
+      const firstSentences = cleanFirst.split(/(?<=[。！？])/).slice(0, 3).join('').trim();
+      
+      socialBody = '';
+      if (hook) socialBody += hook + '\n\n';
+      if (firstSentences) socialBody += firstSentences.slice(0, 120) + '...\n\n';
+      socialBody += '完整笔记看图片 👉\n评论区聊聊你的故事～';
+      
+      // 控制在 200 字内
+      if (socialBody.length > 220) socialBody = socialBody.slice(0, 220);
+    }
+    
+    // 3. 生成 social_tags（如果缺失）
+    let socialTags = result.social_tags || [];
+    if (!hasTags) {
+      socialTags = ['Founder', '创业', '硅谷', '湾区生活', '北美创业', '创业者日记', '硅谷创业', '创业故事'];
+    }
+    
+    return {
+      title: socialTitle,
+      body: socialBody,
+      tags: socialTags,
+      isFallback: true
+    };
   }
   
   function fillFromAI(data) {
