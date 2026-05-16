@@ -115,7 +115,7 @@ const SYSTEM_PROMPT = `你是一个专业的内容排版师，不是创作者，
 保持原文的节奏和语气。</chapter_body>
 </chapter>
 
-[再切几章，共 3-6 个 chapter]
+[继续输出更多 chapter — 数量见下面的"硬性要求 #5"，按原文字数严格执行，每章 500-900 字，宁多勿少]
 
 <cta_tag>BOTTOM LINE</cta_tag>
 <cta_title>**关键词**（从原文提炼的核心观点）</cta_title>

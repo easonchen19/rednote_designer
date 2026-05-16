@@ -1101,15 +1101,34 @@ Founder
     showProgress();
     
     try {
-      const result = await callClaudeAPIStreaming(input, (text) => appendStream(text));
-      setStep('layout', 'active', '测量高度，精准分页...');
+      let result = await callClaudeAPIStreaming(input, (text) => appendStream(text));
 
-      // 内容压缩检测：如果 AI 输出的 chapter_body 总字数 < 原文 70%，提醒用户
+      // 内容压缩检测 + 自动重试（最多 1 次）
       const inputLen = input.length;
-      const bodyLen = (result.chapters || []).reduce((s, ch) => s + (ch.body || '').length, 0);
+      const measure = (r) => ({
+        chapters: (r.chapters || []).length,
+        bodyLen: (r.chapters || []).reduce((s, ch) => s + (ch.body || '').length, 0)
+      });
+      let { chapters: chCount, bodyLen } = measure(result);
+      const tooFew = inputLen >= 1500 && (bodyLen < inputLen * 0.7 || chCount < 3);
+      if (tooFew) {
+        console.warn(`⚠️ AI 输出疑似压缩：原文 ${inputLen} 字，输出 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%），${chCount} 章。自动重试一次...`);
+        showStatus(`⚠️ 内容被压缩（${Math.round(bodyLen/inputLen*100)}%），自动重试...`, 'warn');
+        document.getElementById('stream-display').innerHTML = '';
+        document.getElementById('stat-chars').textContent = '0';
+        try {
+          result = await callClaudeAPIStreaming(input, (text) => appendStream(text));
+          const m2 = measure(result);
+          chCount = m2.chapters; bodyLen = m2.bodyLen;
+          console.log(`重试结果：${chCount} 章，${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%）`);
+        } catch (retryErr) {
+          console.warn('重试失败，使用第一次结果', retryErr);
+        }
+      }
+
+      setStep('layout', 'active', '测量高度，精准分页...');
       if (inputLen >= 1500 && bodyLen < inputLen * 0.7) {
-        console.warn(`⚠️ AI 输出可能被压缩：原文 ${inputLen} 字，输出 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%）`);
-        showStatus(`⚠️ 原文 ${inputLen} 字，本次仅保留 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%），如不满意可重试`, 'warn');
+        showStatus(`⚠️ 原文 ${inputLen} 字，最终保留 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%），如不满意请再点一次生成`, 'warn');
       }
 
       fillFromAI(result);
