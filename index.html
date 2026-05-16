@@ -1132,8 +1132,21 @@ Founder
     }
     const { sections: presplitSections, marked: presplitMarked } = preChunkInput(input);
     const useChunked = input.length >= 2000 && presplitSections.length >= 3;
+    // 极强指令：列出每章的标号要求，强制 AI 输出 N 个 chapter
+    const chapterEnumeration = useChunked
+      ? presplitSections.map((_, i) => `必须输出 <chapter_label>${String(i + 1).padStart(2, '0')} / 第${i + 1}章</chapter_label> 的完整 <chapter>...</chapter>，对应「第 ${i + 1} 段」原文`).join('\n')
+      : '';
     const aiInput = useChunked
-      ? `原文被预先切成 ${presplitSections.length} 段（用 === 第 N 段 === 标记），请严格按段顺序生成 ${presplitSections.length} 个 chapter，每段对应一章。不要合并段，不要漏段。\n\n${presplitMarked}`
+      ? `🚨 强制要求：原文已切成 ${presplitSections.length} 段。你必须输出 ${presplitSections.length} 个完整 <chapter> 块，按段顺序，每段一章，绝对不准合并/省略。
+
+逐章清单（${presplitSections.length} 个，缺一不可）：
+${chapterEnumeration}
+
+每个 chapter_body 必须包含对应原文段的全部文字（≥90%），只允许改错字和断行。
+
+下面是 ${presplitSections.length} 段原文：
+
+${presplitMarked}`
       : input;
     if (useChunked) console.log(`📑 长文本预切段：${presplitSections.length} 段，原文 ${input.length} 字`);
     

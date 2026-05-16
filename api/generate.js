@@ -498,6 +498,8 @@ export default async function handler(req, res) {
           }
           if (json.type === 'message_delta' && json.delta?.stop_reason) {
             console.log(`🛑 stop_reason=${json.delta.stop_reason}, output_tokens=${outputTokens}`);
+            // Forward to client so it can decide whether to retry
+            res.write(`data: ${JSON.stringify({ type: 'stop_info', stop_reason: json.delta.stop_reason, output_tokens: outputTokens })}\n\n`);
           }
           // Anthropic mid-stream error frame
           if (json.type === 'error') {
