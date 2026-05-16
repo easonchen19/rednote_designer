@@ -920,6 +920,12 @@ Founder
             setStep('connect', 'done', `已连接 (${json.model})`);
             continue;
           }
+
+          // ⭐ stop_reason 诊断
+          if (json.type === 'stop_info') {
+            console.log(`🛑 Claude stop_reason=${json.stop_reason}, output_tokens=${json.output_tokens}`);
+            continue;
+          }
           
           if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
             const chunk = json.delta.text;

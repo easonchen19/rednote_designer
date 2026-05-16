@@ -333,7 +333,13 @@ export default async function handler(req, res) {
     
     // ⭐ 三层 Fallback：Sonnet 主力（质量+速度均衡）→ Opus（最强）→ Haiku（兜底）
     // Sonnet 是 Anthropic 官方推荐的默认主力，最适合结构化内容创作
-    const MODEL_CHAIN = [
+    // 长输入优先用 Opus（结构化任务更可靠，Sonnet 在 6000+ 字时观察到输出截断）
+    const isLongInput = (userInput || '').length >= 3000 || hasImages;
+    const MODEL_CHAIN = isLongInput ? [
+      { id: 'claude-opus-4-7',   name: 'Opus 4.7',   maxRetries: 2 },
+      { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', maxRetries: 2 },
+      { id: 'claude-haiku-4-5',  name: 'Haiku 4.5',  maxRetries: 2 }
+    ] : [
       { id: 'claude-sonnet-4-6', name: 'Sonnet 4.6', maxRetries: 2 },
       { id: 'claude-opus-4-7',   name: 'Opus 4.7',   maxRetries: 2 },
       { id: 'claude-haiku-4-5',  name: 'Haiku 4.5',  maxRetries: 2 }
