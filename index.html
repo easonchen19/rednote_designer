@@ -1103,6 +1103,15 @@ Founder
     try {
       const result = await callClaudeAPIStreaming(input, (text) => appendStream(text));
       setStep('layout', 'active', '测量高度，精准分页...');
+
+      // 内容压缩检测：如果 AI 输出的 chapter_body 总字数 < 原文 70%，提醒用户
+      const inputLen = input.length;
+      const bodyLen = (result.chapters || []).reduce((s, ch) => s + (ch.body || '').length, 0);
+      if (inputLen >= 1500 && bodyLen < inputLen * 0.7) {
+        console.warn(`⚠️ AI 输出可能被压缩：原文 ${inputLen} 字，输出 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%）`);
+        showStatus(`⚠️ 原文 ${inputLen} 字，本次仅保留 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%），如不满意可重试`, 'warn');
+      }
+
       fillFromAI(result);
       
       await new Promise(r => requestAnimationFrame(r));

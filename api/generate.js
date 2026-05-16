@@ -121,15 +121,17 @@ const SYSTEM_PROMPT = `你是一个专业的内容排版师，不是创作者。
 
 # 🚨 硬性要求
 
-1. **chapter_body 必须保留原文 90% 以上字面内容**（只改错字、断行）
-2. **chapter_quote 必须是原文原话**（不能编造）
-3. **chapter_title 关键词来自原文**（不能凭空发明）
-4. **章节数：3-6 章**（根据原文长度自动判断）
-5. **如果原文 1500 字以下 → 3 章**
-6. **如果原文 1500-3000 字 → 4 章**
-7. **如果原文 3000+ 字 → 5-6 章**
-8. **social_title / social_body / social_tags 必须生成**
-9. **封面 4 行标题**：每行 ≤ 5 字，不要用 \*\*
+1. **chapter_body 必须保留原文 90% 以上字面内容**（只改错字、断行；不准概括/压缩/重写）
+2. **所有 chapter_body 拼起来的总字数 ≥ 原文字数 × 0.85**（这是硬指标，输出前自己检查一遍）
+3. **chapter_quote 必须是原文原话**（不能编造）
+4. **chapter_title 关键词来自原文**（不能凭空发明）
+5. **章节数严格按原文长度分配**（宁多勿少）：
+   - 原文 < 1500 字 → 3-4 章
+   - 1500-3000 字 → 4-5 章
+   - 3000-5000 字 → 6-7 章，每章 500-800 字
+   - 5000+ 字 → 7-9 章，每章 600-900 字
+6. **social_title / social_body / social_tags 必须生成**
+7. **封面 4 行标题**：每行 ≤ 5 字，不要用 \*\*
 
 # 段落断行规则
 
@@ -300,6 +302,10 @@ export default async function handler(req, res) {
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
     
+    const inputLen = (userInput || '').length;
+    const minBodyLen = Math.floor(inputLen * 0.85);
+    const lengthGuard = `\n\n⚠️ 原文共 ${inputLen} 字。你的所有 chapter_body 拼起来字数必须 ≥ ${minBodyLen} 字。不要概括、不要压缩，只做断行和分章。`;
+
     let messageContent;
     if (hasImages) {
       messageContent = [
@@ -313,11 +319,11 @@ export default async function handler(req, res) {
         })),
         {
           type: 'text',
-          text: `请参考这些图片的内容，结合下面我的想法，提炼成 Founder Notes：\n\n${userInput}`
+          text: `下面是原文（${inputLen} 字），请保留 90% 以上字面内容，按章节排版成 Founder Notes（不是总结，是排版）：\n\n${userInput}${lengthGuard}`
         }
       ];
     } else {
-      messageContent = `把下面想法提炼成 Founder Notes 完整发布包：\n\n${userInput}`;
+      messageContent = `下面是原文（${inputLen} 字），请保留 90% 以上字面内容，按章节排版成 Founder Notes 完整发布包（不是总结，是排版）：\n\n${userInput}${lengthGuard}`;
     }
     
     // ⭐ 三层 Fallback：Sonnet 主力（质量+速度均衡）→ Opus（最强）→ Haiku（兜底）
@@ -346,7 +352,7 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
               model: model.id,
-              max_tokens: 12000,
+              max_tokens: 16000,
               system: SYSTEM_PROMPT,
               stream: true,
               messages: [{ role: 'user', content: messageContent }]
