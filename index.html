@@ -1099,9 +1099,46 @@ Founder
     btn.innerHTML = '<span class="loading"></span>AI 正在工作...';
     showStatus('🤖 开始生成...', 'info');
     showProgress();
+
+    // ⭐ 长文本预切段：把输入按段落聚合成 ~1000 字一段，加显式分段标记，
+    //    让 AI 不需要自己决定章节数，按段落顺序对应章节即可
+    function preChunkInput(text, targetSize = 900) {
+      const paras = text.split(/\n\s*\n+/).map(p => p.trim()).filter(Boolean);
+      if (paras.length === 0) return { sections: [text], marked: text };
+      const sections = [];
+      let cur = '';
+      for (const p of paras) {
+        if (cur && cur.length + p.length > targetSize) {
+          sections.push(cur);
+          cur = p;
+        } else {
+          cur = cur ? cur + '\n\n' + p : p;
+        }
+      }
+      if (cur) sections.push(cur);
+      // 如果输入连一个段落都没换行（口述/OCR 整段），按句号切分
+      if (sections.length === 1 && text.length > targetSize * 1.5) {
+        const sents = text.split(/(?<=[。！？\?\!])\s*/).filter(s => s.trim());
+        sections.length = 0;
+        let buf = '';
+        for (const s of sents) {
+          if (buf && buf.length + s.length > targetSize) { sections.push(buf); buf = s; }
+          else buf += s;
+        }
+        if (buf) sections.push(buf);
+      }
+      const marked = sections.map((s, i) => `=== 第 ${i + 1} 段 ===\n${s}`).join('\n\n');
+      return { sections, marked };
+    }
+    const { sections: presplitSections, marked: presplitMarked } = preChunkInput(input);
+    const useChunked = input.length >= 2000 && presplitSections.length >= 3;
+    const aiInput = useChunked
+      ? `原文被预先切成 ${presplitSections.length} 段（用 === 第 N 段 === 标记），请严格按段顺序生成 ${presplitSections.length} 个 chapter，每段对应一章。不要合并段，不要漏段。\n\n${presplitMarked}`
+      : input;
+    if (useChunked) console.log(`📑 长文本预切段：${presplitSections.length} 段，原文 ${input.length} 字`);
     
     try {
-      let result = await callClaudeAPIStreaming(input, (text) => appendStream(text));
+      let result = await callClaudeAPIStreaming(aiInput, (text) => appendStream(text));
 
       // 内容压缩检测 + 自动重试（最多 1 次）
       const inputLen = input.length;
@@ -1117,7 +1154,7 @@ Founder
         document.getElementById('stream-display').innerHTML = '';
         document.getElementById('stat-chars').textContent = '0';
         try {
-          result = await callClaudeAPIStreaming(input, (text) => appendStream(text));
+          result = await callClaudeAPIStreaming(aiInput, (text) => appendStream(text));
           const m2 = measure(result);
           chCount = m2.chapters; bodyLen = m2.bodyLen;
           console.log(`重试结果：${chCount} 章，${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%）`);

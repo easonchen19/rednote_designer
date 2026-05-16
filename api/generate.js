@@ -357,7 +357,7 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
               model: model.id,
-              max_tokens: 16000,
+              max_tokens: 32000,
               system: SYSTEM_PROMPT,
               stream: true,
               messages: [{ role: 'user', content: messageContent }]
@@ -495,6 +495,13 @@ export default async function handler(req, res) {
           }
           if (json.type === 'message_delta' && json.usage) {
             outputTokens = json.usage.output_tokens || 0;
+          }
+          if (json.type === 'message_delta' && json.delta?.stop_reason) {
+            console.log(`🛑 stop_reason=${json.delta.stop_reason}, output_tokens=${outputTokens}`);
+          }
+          // Anthropic mid-stream error frame
+          if (json.type === 'error') {
+            console.error('Anthropic stream error:', json.error);
           }
         } catch (e) {}
       }
