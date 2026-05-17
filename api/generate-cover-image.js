@@ -48,11 +48,11 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'dall-e-3',
+        model: 'gpt-image-1',
         prompt,
         n: 1,
-        size: '1792x1024',
-        quality: 'standard'
+        size: '1536x1024',
+        quality: 'medium'
       })
     });
 
