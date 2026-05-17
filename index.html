@@ -593,7 +593,7 @@
           <option value="notion">简约 · Notion 风格</option>
           <option value="article">长文 · 文章风格（含 AI 封面图）</option>
         </select>
-        <button id="regen-cover-btn" onclick="regenerateCover()" style="padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:12px; background:#fff; cursor:pointer; white-space:nowrap;">🎨 重新生成封面图</button>
+        <button id="regen-cover-btn" onclick="regenerateCover()" style="padding:8px 10px; border:1px solid #d4a85a; border-radius:6px; font-size:12px; background:#fff8f0; color:#b8862e; cursor:pointer; white-space:nowrap; font-weight:600;">🎨 生成 AI 封面图</button>
       </div>
       <div class="settings-row" style="margin-top:8px;">
         <button class="btn-generate" id="generate-btn" onclick="generateContent()">✨ 一键生成全套</button>
@@ -1369,11 +1369,6 @@ ${presplitMarked}`
       const socialNote = socialPack.isFallback ? '（小红书文案为自动生成）' : '+ 发布文案';
       showStatus(`✅ 完成！用时 ${elapsed}s · ${totalPages} 页 ${socialNote}`, 'success');
 
-      // 文章风格：自动生成封面图（不阻塞主流程）
-      if (document.body.getAttribute('data-theme') === 'article') {
-        generateCoverImage(result).catch(err => console.warn('封面图生成失败：', err));
-      }
-
       setTimeout(() => document.getElementById('progress-panel').classList.remove('active'), 5000);
     } catch (err) {
       showStatus('❌ ' + err.message, 'error');
@@ -1906,15 +1901,6 @@ ${presplitMarked}`
     document.body.setAttribute('data-theme', theme);
     localStorage.setItem('page_theme', theme);
     renderPreview();
-    // 切到 article 且当前还没生成封面图、但已经有 chapters → 自动生成
-    if (theme === 'article' && !window.__coverImageUrl && chapters && chapters.length > 0 && chapters.some(c => (c.body || '').length > 0)) {
-      const fakeResult = {
-        title_lines: (document.getElementById('title').value || '').split('\n'),
-        hook: document.getElementById('hook').value || '',
-        chapters
-      };
-      generateCoverImage(fakeResult).catch(err => console.warn('封面图生成失败：', err));
-    }
   }
   const savedTheme = localStorage.getItem('page_theme') || 'dark-gold';
   document.getElementById('theme-select').value = savedTheme;
@@ -1953,7 +1939,7 @@ ${presplitMarked}`
       console.error(err);
       showStatus('❌ 封面图生成失败：' + err.message, 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🎨 重新生成封面图'; }
+      if (btn) { btn.disabled = false; btn.textContent = window.__coverImageUrl ? '🎨 重新生成封面图' : '🎨 生成 AI 封面图'; }
     }
   }
   window.generateCoverImage = generateCoverImage;
