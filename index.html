@@ -370,6 +370,45 @@
   }
   /* When exporting via html2canvas, JS adds .exporting to body to neutralize scale */
   body.exporting .page { transform: none !important; margin-bottom: 20px !important; }
+
+  /* === Notion 简约风格 === */
+  body[data-theme="notion"] .page {
+    background: #ffffff;
+    color: #1f1f1f;
+    font-family: -apple-system, "Inter", "Helvetica Neue", "PingFang SC", "Source Han Sans SC", sans-serif;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+  }
+  body[data-theme="notion"] .cover .series { color: #888; }
+  body[data-theme="notion"] .cover .series::before { background: #1f1f1f; }
+  body[data-theme="notion"] .cover .title-block { border-left-color: #1f1f1f; border-image: none; }
+  body[data-theme="notion"] .cover .title-line { color: #1f1f1f; font-weight: 700; }
+  body[data-theme="notion"] .cover .title-line.white { color: #6b6b6b; }
+  body[data-theme="notion"] .cover .meta { border-left-color: #d9d9d6; color: #888; }
+  body[data-theme="notion"] .cover .divider { background: linear-gradient(90deg, #d9d9d6 0%, transparent 80%); opacity: 1; }
+  body[data-theme="notion"] .cover .hook { color: #4a4a4a; }
+  body[data-theme="notion"] .cover .footer { color: #999; }
+  body[data-theme="notion"] .cover .avatar { border-color: #d9d9d6; }
+
+  body[data-theme="notion"] .content .chapter-tag { background: #f1f1ef; border-left-color: #1f1f1f; color: #555; }
+  body[data-theme="notion"] .content .chapter-title { color: #1f1f1f; }
+  body[data-theme="notion"] .content .chapter-title .gold { color: #1f1f1f; background: #fef3c7; padding: 0 4px; }
+  body[data-theme="notion"] .content .quote-box { background: #f7f6f3; border-left-color: #d4d4d4; color: #555; }
+  body[data-theme="notion"] .content .quote-box strong,
+  body[data-theme="notion"] .content .quote-box em { color: #1f1f1f; background: #fef3c7; padding: 0 3px; border-radius: 2px; }
+  body[data-theme="notion"] .content .body-text { color: #1f1f1f; }
+  body[data-theme="notion"] .content .body-text strong { color: #1f1f1f; background: #fef3c7; }
+  body[data-theme="notion"] .content .body-text em { color: #1f1f1f; background: #fef3c7; padding: 0 3px; border-radius: 2px; }
+  body[data-theme="notion"] .content .dot { background: #d4d4d4; }
+  body[data-theme="notion"] .content .dot.active { background: #1f1f1f; }
+
+  body[data-theme="notion"] .cta .small-tag { color: #888; }
+  body[data-theme="notion"] .cta .big-title { color: #1f1f1f; }
+  body[data-theme="notion"] .cta .big-title .gold { color: #1f1f1f; background: #fef3c7; padding: 0 4px; }
+  body[data-theme="notion"] .cta .summary-prose { color: #4a4a4a; border-left-color: #d9d9d6; }
+  body[data-theme="notion"] .cta .summary-prose strong,
+  body[data-theme="notion"] .cta .summary-prose em { color: #1f1f1f; background: #fef3c7; padding: 0 3px; border-radius: 2px; }
+  body[data-theme="notion"] .cta .cta-line { color: #4a4a4a; }
+  body[data-theme="notion"] .cta .follow-line { color: #555; border-color: #d9d9d6; }
 </style>
 </head>
 <body>
@@ -430,7 +469,14 @@
         </div>
       </div>
       
-      <div class="settings-row">
+      <div class="settings-row" style="display:flex; gap:8px; align-items:center;">
+        <label style="font-size:13px; color:#555; white-space:nowrap;">🎨 风格</label>
+        <select id="theme-select" onchange="applyTheme(this.value)" style="flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; background:#fff; cursor:pointer;">
+          <option value="dark-gold">黑金 · 创业笔记（默认）</option>
+          <option value="notion">简约 · Notion 风格</option>
+        </select>
+      </div>
+      <div class="settings-row" style="margin-top:8px;">
         <button class="btn-generate" id="generate-btn" onclick="generateContent()">✨ 一键生成全套</button>
       </div>
       <div class="status" id="ai-status"></div>
@@ -1709,7 +1755,16 @@ ${presplitMarked}`
   if (savedAuthor && savedAuthor !== '@ 你的账号名' && savedAuthor.trim() !== '') {
     document.getElementById('author').value = savedAuthor;
   }
-  
+
+  // 应用保存的风格
+  function applyTheme(theme) {
+    document.body.setAttribute('data-theme', theme);
+    localStorage.setItem('page_theme', theme);
+  }
+  const savedTheme = localStorage.getItem('page_theme') || 'dark-gold';
+  document.getElementById('theme-select').value = savedTheme;
+  applyTheme(savedTheme);
+
   renderChapterInputs();
   renderPreview();
 </script>
