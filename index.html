@@ -421,111 +421,95 @@
   body[data-theme="notion"] .cta .follow-line { color: #555; border-color: #d9d9d6; }
 
   /* === 长文 · 文章风格 === */
-  /* 默认隐藏封面图，只在 article 主题显示 */
+  /* 默认隐藏封面图（图片功能暂未启用） */
   .cover .cover-image { display: none; }
 
   body[data-theme="article"] .page {
     background: #ffffff;
     color: #1a1a1a;
-    font-family: "PingFang SC", "Source Han Serif SC", "Songti SC", "STSong", "Times New Roman", serif;
-    box-shadow: 0 4px 18px rgba(0,0,0,0.1);
+    font-family: "PingFang SC", "Source Han Sans SC", "Helvetica Neue", sans-serif;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.08);
   }
 
-  /* 封面：黑色顶部条 + 大标题 + 配图 */
-  body[data-theme="article"] .page.cover {
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-  }
-  body[data-theme="article"] .cover::before {
-    content: '';
-    display: block;
-    height: 38px;
-    background: #1a1a1a;
-    flex-shrink: 0;
-  }
-  body[data-theme="article"] .cover .series,
+  /* 封面：极简，只有标题 + 作者 */
+  body[data-theme="article"] .page.cover { padding: 60px 32px 40px 32px; }
+  body[data-theme="article"] .cover .series { color: #999; font-weight: 500; font-size: 11px; }
+  body[data-theme="article"] .cover .series::before { background: #1a1a1a; }
   body[data-theme="article"] .cover .meta,
   body[data-theme="article"] .cover .divider,
-  body[data-theme="article"] .cover .hook,
-  body[data-theme="article"] .cover .footer { display: none; }
+  body[data-theme="article"] .cover .hook { display: none; }
   body[data-theme="article"] .cover .title-block {
-    margin: 30px 28px 0 28px;
+    margin-top: 40px;
     padding: 0;
     border: none;
   }
   body[data-theme="article"] .cover .title-line {
     color: #1a1a1a;
-    font-size: 30px;
+    font-size: 26px;
     font-weight: 700;
-    line-height: 1.35;
+    line-height: 1.4;
     letter-spacing: 0;
     margin-bottom: 0;
   }
   body[data-theme="article"] .cover .title-line.white { color: #1a1a1a; }
-  body[data-theme="article"] .cover .cover-image {
-    display: block;
-    margin: 24px 28px 28px 28px;
-    height: 240px;
-    background-color: #f0f0f0;
-    background-size: cover;
-    background-position: center;
-    border-radius: 4px;
-  }
+  body[data-theme="article"] .cover .footer { color: #999; bottom: 24px; }
+  body[data-theme="article"] .cover .avatar { border-color: #ddd; }
 
-  /* 内容页：纯白底、衬底字、段落松散 */
-  body[data-theme="article"] .page.content { padding: 50px 32px 60px 32px; }
+  /* 内容页：极简、紧凑、可控行距 */
+  body[data-theme="article"] .page.content { padding: 36px 32px 44px 32px; }
   body[data-theme="article"] .content .chapter-tag,
   body[data-theme="article"] .content .chapter-title,
   body[data-theme="article"] .content .quote-box,
   body[data-theme="article"] .content .pagination { display: none; }
   body[data-theme="article"] .content .body-text {
     color: #1a1a1a;
-    font-size: 17px;
-    line-height: 1.85;
-    letter-spacing: 0.2px;
+    font-size: 15px;
+    line-height: 1.55;            /* 紧凑可控，同段落内 1.55 倍 */
+    letter-spacing: 0;
     margin-top: 0;
   }
+  /* 段落之间靠 <br><br>（来自 \n\n）拉开，等于一个 line-height 的空行 */
   body[data-theme="article"] .content .body-text strong {
     color: inherit; background: none; padding: 0; font-weight: 700;
   }
   body[data-theme="article"] .content .body-text em {
     color: inherit; background: none; padding: 0; font-style: normal; font-weight: 700;
   }
-  /* 章节小标题：用 ## 标记 */
+  /* h2（## 标记）：保留但低调，不要装饰 */
   body[data-theme="article"] .body-text h2 {
-    font-size: 22px;
-    font-weight: 800;
-    margin: 28px 0 16px 0;
+    font-size: 16px;
+    font-weight: 700;
+    margin: 18px 0 6px 0;
     color: #1a1a1a;
     line-height: 1.4;
   }
-  /* 对话气泡：> 引导的引文 */
+  body[data-theme="article"] .body-text h2:first-child { margin-top: 0; }
+  /* > 引述：浅灰底小圆角，紧凑 */
   body[data-theme="article"] .body-text .chat-bubble {
     display: block;
-    margin: 16px 0;
-    padding: 14px 18px;
-    background: #f1f1ef;
-    border-radius: 6px;
-    color: #4a4a4a;
-    font-size: 15.5px;
-    line-height: 1.6;
+    margin: 10px 0;
+    padding: 10px 14px;
+    background: #f4f4f3;
+    border-radius: 4px;
+    color: #3a3a3a;
+    font-size: 14px;
+    line-height: 1.55;
   }
 
   /* CTA 页 */
-  body[data-theme="article"] .page.cta { padding: 60px 32px; }
-  body[data-theme="article"] .cta .small-tag { color: #888; font-size: 11px; }
-  body[data-theme="article"] .cta .big-title { color: #1a1a1a; font-size: 26px; font-weight: 700; }
+  body[data-theme="article"] .page.cta { padding: 50px 32px 40px 32px; }
+  body[data-theme="article"] .cta .small-tag { color: #999; font-size: 11px; }
+  body[data-theme="article"] .cta .big-title { color: #1a1a1a; font-size: 22px; font-weight: 700; line-height: 1.35; }
   body[data-theme="article"] .cta .big-title .gold { color: #1a1a1a; }
   body[data-theme="article"] .cta .summary-prose {
-    color: #333; border-left-color: #d9d9d6; font-size: 16px; line-height: 1.85;
+    color: #1a1a1a; border-left-color: #ddd; font-size: 15px; line-height: 1.55; margin-top: 18px;
   }
   body[data-theme="article"] .cta .summary-prose strong,
   body[data-theme="article"] .cta .summary-prose em {
     color: inherit; background: none; padding: 0; font-style: normal; font-weight: 700;
   }
-  body[data-theme="article"] .cta .cta-line { color: #1a1a1a; }
-  body[data-theme="article"] .cta .follow-line { color: #555; border-color: #d9d9d6; }
+  body[data-theme="article"] .cta .cta-line { color: #1a1a1a; font-size: 14px; line-height: 1.55; }
+  body[data-theme="article"] .cta .follow-line { color: #666; border-color: #ddd; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -591,9 +575,9 @@
         <select id="theme-select" onchange="applyTheme(this.value)" style="flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; background:#fff; cursor:pointer;">
           <option value="dark-gold">黑金 · 创业笔记（默认）</option>
           <option value="notion">简约 · Notion 风格</option>
-          <option value="article">长文 · 文章风格（含 AI 封面图）</option>
+          <option value="article">长文 · 文章风格</option>
         </select>
-        <button id="regen-cover-btn" onclick="regenerateCover()" style="padding:8px 10px; border:1px solid #d4a85a; border-radius:6px; font-size:12px; background:#fff8f0; color:#b8862e; cursor:pointer; white-space:nowrap; font-weight:600;">🎨 生成 AI 封面图</button>
+        <button id="regen-cover-btn" onclick="regenerateCover()" style="display:none; padding:8px 10px; border:1px solid #d4a85a; border-radius:6px; font-size:12px; background:#fff8f0; color:#b8862e; cursor:pointer; white-space:nowrap; font-weight:600;">🎨 生成 AI 封面图</button>
       </div>
       <div class="settings-row" style="margin-top:8px;">
         <button class="btn-generate" id="generate-btn" onclick="generateContent()">✨ 一键生成全套</button>
