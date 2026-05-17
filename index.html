@@ -1927,7 +1927,7 @@ ${presplitMarked}`
           const d = await resp.json();
           msg = d.error || msg;
           if (d.hint) msg += '\n' + d.hint;
-          if (d.debug) { console.error('OpenAI debug:', d.debug); msg += '\n[详见 console]'; }
+          if (d.debug) { console.error('Image API debug:', d.debug); msg += '\n[详见 console]'; }
         } catch {}
         throw new Error(msg);
       }
