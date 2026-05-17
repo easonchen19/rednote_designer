@@ -1,6 +1,6 @@
 // /api/generate-cover-image.js
-// Generate a cover image via OpenAI DALL-E 3 for the article theme
-// Requires env var: OPENAI_API_KEY
+// Generate a cover image via fal.ai FLUX schnell for the article theme
+// Requires env var: FAL_KEY (get from https://fal.ai/dashboard/keys)
 
 export const config = {
   maxDuration: 60
@@ -24,11 +24,11 @@ export default async function handler(req, res) {
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.FAL_KEY;
   if (!apiKey) {
     res.status(500).json({
-      error: 'OPENAI_API_KEY not configured',
-      hint: '请在 Vercel 环境变量里设置 OPENAI_API_KEY 再使用 AI 封面图功能。'
+      error: 'FAL_KEY not configured',
+      hint: '请在 Vercel 环境变量里设置 FAL_KEY（从 https://fal.ai/dashboard/keys 获取）再使用 AI 封面图功能。'
     });
     return;
   }
@@ -41,24 +41,25 @@ export default async function handler(req, res) {
     }
 
     const prompt = buildPrompt(title, summary);
-    const resp = await fetch('https://api.openai.com/v1/images/generations', {
+    // fal.ai sync endpoint: https://fal.run/<model>
+    const resp = await fetch('https://fal.run/fal-ai/flux/schnell', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
+        'Authorization': `Key ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'gpt-image-1',
         prompt,
-        n: 1,
-        size: '1536x1024',
-        quality: 'medium'
+        image_size: 'landscape_16_9',
+        num_inference_steps: 4,
+        num_images: 1,
+        enable_safety_checker: true
       })
     });
 
     if (!resp.ok) {
       const errText = await resp.text();
-      console.error('OpenAI image gen error:', resp.status, errText);
+      console.error('fal.ai image gen error:', resp.status, errText);
       res.status(resp.status).json({
         error: `图片生成失败 (HTTP ${resp.status})`,
         debug: errText.slice(0, 500)
@@ -67,26 +68,24 @@ export default async function handler(req, res) {
     }
 
     const data = await resp.json();
-    const url = data?.data?.[0]?.url;
-    const b64Direct = data?.data?.[0]?.b64_json;
-    let b64 = b64Direct;
-    if (!b64 && url) {
-      // dall-e-3 默认返回 url，server-side 拉一次再 base64，避免前端跨域 + URL 过期
-      const imgResp = await fetch(url);
-      if (!imgResp.ok) {
-        res.status(500).json({ error: '下载图片失败', debug: `image url HTTP ${imgResp.status}` });
-        return;
-      }
-      const buf = Buffer.from(await imgResp.arrayBuffer());
-      b64 = buf.toString('base64');
-    }
-    if (!b64) {
+    const url = data?.images?.[0]?.url;
+    if (!url) {
       res.status(500).json({ error: '图片生成返回为空', debug: JSON.stringify(data).slice(0, 500) });
       return;
     }
 
+    // Fetch the image from fal CDN and inline as base64 so frontend can embed and html2canvas can render
+    const imgResp = await fetch(url);
+    if (!imgResp.ok) {
+      res.status(500).json({ error: '下载图片失败', debug: `image url HTTP ${imgResp.status}` });
+      return;
+    }
+    const mimeType = imgResp.headers.get('content-type') || 'image/jpeg';
+    const buf = Buffer.from(await imgResp.arrayBuffer());
+    const b64 = buf.toString('base64');
+
     res.status(200).json({
-      dataUrl: `data:image/png;base64,${b64}`,
+      dataUrl: `data:${mimeType};base64,${b64}`,
       prompt
     });
   } catch (err) {
