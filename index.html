@@ -419,6 +419,113 @@
   body[data-theme="notion"] .cta .summary-prose em { color: inherit; background: none; padding: 0; font-style: normal; font-weight: 700; }
   body[data-theme="notion"] .cta .cta-line { color: #1f1f1f; }
   body[data-theme="notion"] .cta .follow-line { color: #555; border-color: #d9d9d6; }
+
+  /* === 长文 · 文章风格 === */
+  /* 默认隐藏封面图，只在 article 主题显示 */
+  .cover .cover-image { display: none; }
+
+  body[data-theme="article"] .page {
+    background: #ffffff;
+    color: #1a1a1a;
+    font-family: "PingFang SC", "Source Han Serif SC", "Songti SC", "STSong", "Times New Roman", serif;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.1);
+  }
+
+  /* 封面：黑色顶部条 + 大标题 + 配图 */
+  body[data-theme="article"] .page.cover {
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  body[data-theme="article"] .cover::before {
+    content: '';
+    display: block;
+    height: 38px;
+    background: #1a1a1a;
+    flex-shrink: 0;
+  }
+  body[data-theme="article"] .cover .series,
+  body[data-theme="article"] .cover .meta,
+  body[data-theme="article"] .cover .divider,
+  body[data-theme="article"] .cover .hook,
+  body[data-theme="article"] .cover .footer { display: none; }
+  body[data-theme="article"] .cover .title-block {
+    margin: 30px 28px 0 28px;
+    padding: 0;
+    border: none;
+  }
+  body[data-theme="article"] .cover .title-line {
+    color: #1a1a1a;
+    font-size: 30px;
+    font-weight: 700;
+    line-height: 1.35;
+    letter-spacing: 0;
+    margin-bottom: 0;
+  }
+  body[data-theme="article"] .cover .title-line.white { color: #1a1a1a; }
+  body[data-theme="article"] .cover .cover-image {
+    display: block;
+    margin: 24px 28px 28px 28px;
+    height: 240px;
+    background-color: #f0f0f0;
+    background-size: cover;
+    background-position: center;
+    border-radius: 4px;
+  }
+
+  /* 内容页：纯白底、衬底字、段落松散 */
+  body[data-theme="article"] .page.content { padding: 50px 32px 60px 32px; }
+  body[data-theme="article"] .content .chapter-tag,
+  body[data-theme="article"] .content .chapter-title,
+  body[data-theme="article"] .content .quote-box,
+  body[data-theme="article"] .content .pagination { display: none; }
+  body[data-theme="article"] .content .body-text {
+    color: #1a1a1a;
+    font-size: 17px;
+    line-height: 1.85;
+    letter-spacing: 0.2px;
+    margin-top: 0;
+  }
+  body[data-theme="article"] .content .body-text strong {
+    color: inherit; background: none; padding: 0; font-weight: 700;
+  }
+  body[data-theme="article"] .content .body-text em {
+    color: inherit; background: none; padding: 0; font-style: normal; font-weight: 700;
+  }
+  /* 章节小标题：用 ## 标记 */
+  body[data-theme="article"] .body-text h2 {
+    font-size: 22px;
+    font-weight: 800;
+    margin: 28px 0 16px 0;
+    color: #1a1a1a;
+    line-height: 1.4;
+  }
+  /* 对话气泡：> 引导的引文 */
+  body[data-theme="article"] .body-text .chat-bubble {
+    display: block;
+    margin: 16px 0;
+    padding: 14px 18px;
+    background: #f1f1ef;
+    border-radius: 6px;
+    color: #4a4a4a;
+    font-size: 15.5px;
+    line-height: 1.6;
+  }
+
+  /* CTA 页 */
+  body[data-theme="article"] .page.cta { padding: 60px 32px; }
+  body[data-theme="article"] .cta .small-tag { color: #888; font-size: 11px; }
+  body[data-theme="article"] .cta .big-title { color: #1a1a1a; font-size: 26px; font-weight: 700; }
+  body[data-theme="article"] .cta .big-title .gold { color: #1a1a1a; }
+  body[data-theme="article"] .cta .summary-prose {
+    color: #333; border-left-color: #d9d9d6; font-size: 16px; line-height: 1.85;
+  }
+  body[data-theme="article"] .cta .summary-prose strong,
+  body[data-theme="article"] .cta .summary-prose em {
+    color: inherit; background: none; padding: 0; font-style: normal; font-weight: 700;
+  }
+  body[data-theme="article"] .cta .cta-line { color: #1a1a1a; }
+  body[data-theme="article"] .cta .follow-line { color: #555; border-color: #d9d9d6; }
 </style>
 </head>
 <body>
@@ -484,7 +591,9 @@
         <select id="theme-select" onchange="applyTheme(this.value)" style="flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; background:#fff; cursor:pointer;">
           <option value="dark-gold">黑金 · 创业笔记（默认）</option>
           <option value="notion">简约 · Notion 风格</option>
+          <option value="article">长文 · 文章风格（含 AI 封面图）</option>
         </select>
+        <button id="regen-cover-btn" onclick="regenerateCover()" style="padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:12px; background:#fff; cursor:pointer; white-space:nowrap;">🎨 重新生成封面图</button>
       </div>
       <div class="settings-row" style="margin-top:8px;">
         <button class="btn-generate" id="generate-btn" onclick="generateContent()">✨ 一键生成全套</button>
@@ -1259,7 +1368,12 @@ ${presplitMarked}`
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       const socialNote = socialPack.isFallback ? '（小红书文案为自动生成）' : '+ 发布文案';
       showStatus(`✅ 完成！用时 ${elapsed}s · ${totalPages} 页 ${socialNote}`, 'success');
-      
+
+      // 文章风格：自动生成封面图（不阻塞主流程）
+      if (document.body.getAttribute('data-theme') === 'article') {
+        generateCoverImage(result).catch(err => console.warn('封面图生成失败：', err));
+      }
+
       setTimeout(() => document.getElementById('progress-panel').classList.remove('active'), 5000);
     } catch (err) {
       showStatus('❌ ' + err.message, 'error');
@@ -1636,9 +1750,29 @@ ${presplitMarked}`
   
   function parseMarkdown(text) {
     if (!text) return '';
-    let html = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*(.+?)\*/g, '<em>$1</em>');
-    return html.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
+    // Block parsing: ## headers and > chat-bubbles (used by article theme; harmless for others)
+    const lines = String(text).split('\n');
+    const blocks = [];
+    let buf = [];
+    const flushBuf = () => { if (buf.length) { blocks.push({ type: 'p', text: buf.join('\n') }); buf = []; } };
+    for (const line of lines) {
+      const h2 = line.match(/^##\s+(.+)$/);
+      const bq = line.match(/^>\s+(.+)$/);
+      if (h2) { flushBuf(); blocks.push({ type: 'h2', text: h2[1] }); }
+      else if (bq) { flushBuf(); blocks.push({ type: 'quote', text: bq[1] }); }
+      else buf.push(line);
+    }
+    flushBuf();
+    const inlineFmt = (s) => s
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>');
+    return blocks.map(b => {
+      const inner = inlineFmt(b.text);
+      if (b.type === 'h2') return `<h2>${inner}</h2>`;
+      if (b.type === 'quote') return `<div class="chat-bubble">${inner}</div>`;
+      return inner.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
+    }).join('');
   }
   function parseMarkdownGold(text) {
     if (!text) return '';
@@ -1700,7 +1834,8 @@ ${presplitMarked}`
     }
     const total = allPages.length + 2;
     let pageNum = 1;
-    html += `<div class="page-label">封面 · ${pageNum}/${total}</div><div class="page cover" data-page="01_cover"><div class="series">${escapeHtml(series)}</div><div class="title-block">${titleLines.map((line, i) => { const isEn = /^[A-Za-z0-9\s]+$/.test(line.trim()); const colorClass = i < 2 ? '' : 'white'; return `<div class="title-line ${colorClass} ${isEn?'en':''}">${escapeHtml(line) || '&nbsp;'}</div>`; }).join('')}</div><div class="meta">全文 ${escapeHtml(wordCount)}  |  阅读需 ${escapeHtml(readTime)}</div><div class="divider"></div><div class="hook">${escapeHtml(hook).replace(/\n/g, '<br>')}</div><div class="footer"><div class="avatar-row"><div class="avatar"></div><span>${escapeHtml(author)}</span></div><span>${pageNum} / ${total}</span></div></div>`;
+    const coverImg = window.__coverImageUrl ? `<div class="cover-image" style="background-image:url('${window.__coverImageUrl}')"></div>` : '';
+    html += `<div class="page-label">封面 · ${pageNum}/${total}</div><div class="page cover" data-page="01_cover"><div class="series">${escapeHtml(series)}</div><div class="title-block">${titleLines.map((line, i) => { const isEn = /^[A-Za-z0-9\s]+$/.test(line.trim()); const colorClass = i < 2 ? '' : 'white'; return `<div class="title-line ${colorClass} ${isEn?'en':''}">${escapeHtml(line) || '&nbsp;'}</div>`; }).join('')}</div>${coverImg}<div class="meta">全文 ${escapeHtml(wordCount)}  |  阅读需 ${escapeHtml(readTime)}</div><div class="divider"></div><div class="hook">${escapeHtml(hook).replace(/\n/g, '<br>')}</div><div class="footer"><div class="avatar-row"><div class="avatar"></div><span>${escapeHtml(author)}</span></div><span>${pageNum} / ${total}</span></div></div>`;
     pageNum++;
     allPages.forEach((page, idx) => {
       let dots = '';
@@ -1770,10 +1905,65 @@ ${presplitMarked}`
   function applyTheme(theme) {
     document.body.setAttribute('data-theme', theme);
     localStorage.setItem('page_theme', theme);
+    renderPreview();
+    // 切到 article 且当前还没生成封面图、但已经有 chapters → 自动生成
+    if (theme === 'article' && !window.__coverImageUrl && chapters && chapters.length > 0 && chapters.some(c => (c.body || '').length > 0)) {
+      const fakeResult = {
+        title_lines: (document.getElementById('title').value || '').split('\n'),
+        hook: document.getElementById('hook').value || '',
+        chapters
+      };
+      generateCoverImage(fakeResult).catch(err => console.warn('封面图生成失败：', err));
+    }
   }
   const savedTheme = localStorage.getItem('page_theme') || 'dark-gold';
   document.getElementById('theme-select').value = savedTheme;
   applyTheme(savedTheme);
+
+  // 调 /api/generate-cover-image 生成 DALL-E 封面图，存入 window.__coverImageUrl 并重渲
+  async function generateCoverImage(result) {
+    const titleLines = (result.title_lines || []).filter(x => x && x.trim());
+    const title = titleLines.join(' ').replace(/\*\*/g, '').trim();
+    if (!title) return;
+    const summary = (result.hook || '') + ' ' + (result.chapters?.[0]?.body || '').slice(0, 200);
+    const btn = document.getElementById('regen-cover-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '🎨 生成中...'; }
+    showStatus('🎨 正在生成 AI 封面图...', 'info');
+    try {
+      const resp = await fetch('/api/generate-cover-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, summary })
+      });
+      if (!resp.ok) {
+        let msg = `HTTP ${resp.status}`;
+        try { const d = await resp.json(); msg = d.error || msg; if (d.hint) msg += '\n' + d.hint; } catch {}
+        throw new Error(msg);
+      }
+      const data = await resp.json();
+      window.__coverImageUrl = data.dataUrl;
+      renderPreview();
+      showStatus('✅ 封面图已生成', 'success');
+    } catch (err) {
+      console.error(err);
+      showStatus('❌ 封面图生成失败：' + err.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '🎨 重新生成封面图'; }
+    }
+  }
+  window.generateCoverImage = generateCoverImage;
+  window.regenerateCover = function() {
+    if (!chapters || chapters.length === 0) {
+      showStatus('请先生成内容', 'error');
+      return;
+    }
+    window.__coverImageUrl = null;
+    generateCoverImage({
+      title_lines: (document.getElementById('title').value || '').split('\n'),
+      hook: document.getElementById('hook').value || '',
+      chapters
+    });
+  };
 
   renderChapterInputs();
   renderPreview();

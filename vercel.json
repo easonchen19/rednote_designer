@@ -5,6 +5,9 @@
     },
     "api/extract-images.js": {
       "maxDuration": 300
+    },
+    "api/generate-cover-image.js": {
+      "maxDuration": 60
     }
   },
   "rewrites": [
