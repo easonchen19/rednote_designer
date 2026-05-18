@@ -758,6 +758,7 @@ Founder
   <div class="preview">
     <div class="preview-actions">
       <button class="btn-download" id="download-btn" onclick="downloadAll()">📦 一键下载所有图片（ZIP）</button>
+      <button class="btn-download" id="email-btn" style="margin-top: 8px; background: #fff; color: #1a1410;" onclick="sendToEmail()">📧 发到我的邮箱</button>
     </div>
     <div id="pages-output"></div>
   </div>
@@ -1979,7 +1980,83 @@ ${presplitMarked}`
       document.body.classList.remove('exporting');
     }
   }
-  
+
+  // 📧 把图片 ZIP + 文案发到指定邮箱
+  async function sendToEmail() {
+    const btn = document.getElementById('email-btn');
+    const savedEmail = localStorage.getItem('email_to') || 'eason@jaguarAI.ai';
+    const to = (prompt('发送到哪个邮箱？', savedEmail) || '').trim();
+    if (!to) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+      showStatus('邮箱格式不对', 'error');
+      return;
+    }
+    localStorage.setItem('email_to', to);
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="loading"></span>正在生成图片...';
+    document.body.classList.add('exporting');
+
+    try {
+      const pages = document.querySelectorAll('#pages-output .page');
+      if (!pages.length) {
+        showStatus('请先生成内容', 'error');
+        return;
+      }
+      const zip = new JSZip();
+      for (let i = 0; i < pages.length; i++) {
+        const page = pages[i];
+        const pageType = page.getAttribute('data-page');
+        btn.innerHTML = `<span class="loading"></span>生成中 ${i+1}/${pages.length}...`;
+        const canvas = await html2canvas(page, { scale: 3, backgroundColor: null, logging: false, useCORS: true });
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        zip.file(`${pageType}.png`, blob);
+      }
+
+      btn.innerHTML = '<span class="loading"></span>打包附件...';
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const zipBase64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(String(reader.result).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(zipBlob);
+      });
+
+      // 邮件正文：用小红书发布文案（postData 来自 generateSocialPackFallback）
+      const subject = (postData?.title || document.getElementById('title')?.value || '你的 Founder Notes').replace(/\n/g, ' ');
+      const bodyText = postData?.body || '';
+      const tags = postData?.tags || [];
+      const zipFilename = `xiaohongshu_${new Date().toISOString().slice(0,10)}.zip`;
+
+      btn.innerHTML = '<span class="loading"></span>发送中...';
+      const resp = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to, title: subject, body: bodyText, tags, zipBase64, zipFilename })
+      });
+      if (!resp.ok) {
+        let msg = `HTTP ${resp.status}`;
+        try {
+          const d = await resp.json();
+          msg = d.error || msg;
+          if (d.hint) msg += '\n' + d.hint;
+          if (d.debug) console.error('Resend debug:', d.debug);
+        } catch {}
+        throw new Error(msg);
+      }
+      showStatus(`✅ 已发送到 ${to}`, 'success');
+      btn.innerHTML = '✅ 已发送';
+      setTimeout(() => { btn.innerHTML = '📧 发到我的邮箱'; btn.disabled = false; }, 3000);
+    } catch (err) {
+      console.error(err);
+      showStatus('❌ 发送失败：' + err.message, 'error');
+      btn.innerHTML = '❌ 发送失败';
+      setTimeout(() => { btn.innerHTML = '📧 发到我的邮箱'; btn.disabled = false; }, 3000);
+    } finally {
+      document.body.classList.remove('exporting');
+    }
+  }
+
   document.addEventListener('input', (e) => {
     if (!e.target.matches('[data-ch]')) renderPreview();
   });
