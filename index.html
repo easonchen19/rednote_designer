@@ -650,11 +650,21 @@
       <h3>🎙️ Step 1：告诉 AI 你的想法</h3>
 
       <!-- 模式选择：排版（保留原文）vs 创作（给标题 AI 写全文）-->
-      <div class="settings-row" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+      <div class="settings-row" style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
         <label style="font-size:13px; color:#555; white-space:nowrap;">🛠 模式</label>
         <select id="gen-mode" onchange="onModeChange(this.value)" style="flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; background:#fff; cursor:pointer;">
           <option value="layout">📝 排版 · 我有原文，请帮我分章排版（保留 90% 字面）</option>
           <option value="create">✨ 创作 · 我只给标题/主题，AI 帮我写全文</option>
+        </select>
+      </div>
+      <!-- 创作模式专属：字数选择 -->
+      <div class="settings-row" id="create-length-row" style="display:none; gap:8px; align-items:center; margin-bottom:12px;">
+        <label style="font-size:13px; color:#555; white-space:nowrap;">📏 字数</label>
+        <select id="create-length" style="flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; background:#fff; cursor:pointer;">
+          <option value="short">短 · 1500-2000 字（4-5 章）</option>
+          <option value="medium" selected>中 · 2500-3500 字（5-7 章）</option>
+          <option value="long">长 · 4000-5500 字（7-9 章）</option>
+          <option value="xlong">超长 · 5500-7500 字（9-12 章）</option>
         </select>
       </div>
 
@@ -1139,11 +1149,12 @@ Founder
   async function callClaudeAPIStreaming(userInput, onChunk, opts = {}) {
     setStep('connect', 'active', '连接中...');
     const mode = opts.mode || (document.getElementById('gen-mode')?.value || 'layout');
+    const targetLength = opts.targetLength || (document.getElementById('create-length')?.value || 'medium');
 
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userInput, mode })
+      body: JSON.stringify({ userInput, mode, targetLength })
     });
     
     if (!response.ok) {
@@ -2099,16 +2110,25 @@ ${presplitMarked}`
   function onModeChange(mode) {
     const hint = document.getElementById('text-hint');
     const input = document.getElementById('ai-input');
+    const lenRow = document.getElementById('create-length-row');
     if (mode === 'create') {
-      if (hint) hint.textContent = '✨ 给一个标题或主题（一句话即可），AI 帮你写一篇 2000-2800 字的 Founder Notes 长文。';
+      if (hint) hint.textContent = '✨ 给一个标题或主题（一句话即可），AI 帮你写完整文章。';
       if (input) input.placeholder = '比如：硅谷的中年危机为什么是假的';
+      if (lenRow) lenRow.style.display = 'flex';
     } else {
       if (hint) hint.textContent = '直接写下你的想法，越乱越好。AI 会自动提炼成 Will 风格的笔记。';
       if (input) input.placeholder = '比如：今天和一个 Meta E7 的朋友吃饭...';
+      if (lenRow) lenRow.style.display = 'none';
     }
     localStorage.setItem('gen_mode', mode);
   }
   window.onModeChange = onModeChange;
+  // 字数选择持久化
+  document.addEventListener('change', (e) => {
+    if (e.target && e.target.id === 'create-length') {
+      localStorage.setItem('create_length', e.target.value);
+    }
+  });
 
   // 🌅 手动触发 RSS 自动生成 + 发邮件（SSE 流式可视化）
   async function runDailyNow() {
@@ -2215,6 +2235,9 @@ ${presplitMarked}`
   const modeSel = document.getElementById('gen-mode');
   if (modeSel) modeSel.value = savedMode;
   onModeChange(savedMode);
+  const savedLen = localStorage.getItem('create_length') || 'medium';
+  const lenSel = document.getElementById('create-length');
+  if (lenSel) lenSel.value = savedLen;
 
   const savedTheme = localStorage.getItem('page_theme') || 'dark-gold';
   document.getElementById('theme-select').value = savedTheme;

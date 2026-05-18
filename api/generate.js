@@ -1,6 +1,54 @@
 // /api/generate.js - Claude 代理 + 限流 + 日志（Supabase 版）
 import { createClient } from '@supabase/supabase-js';
-import { NEWS_COMMENTARY_PROMPT as CREATE_PROMPT } from './_lib/news.js';
+
+// 创作模式专用 prompt（字数由 user message 指定，可调）
+const CREATE_PROMPT = `你是 Will，硅谷连续创业者，专长 AI / SaaS / 创业心理 / 融资节奏。
+基于用户给的主题/标题，从零创作一篇 Founder Notes 风格的小红书长文。
+
+# 风格
+- 反共识、有冲突感、不像新闻报道
+- 中英混排自然（VP / MD / runway / PMF / burn rate 等可直接英文）
+- 有具体数字、人名、场景细节（可基于你对硅谷的常识合理想象）
+- 不要凡尔赛，不要 LinkedIn 鸡汤体
+
+# 输出格式（严格 XML，必须以 </note> 结尾）
+
+<note>
+<series>FOUNDER NOTES · 0X</series>
+<title_line_1>标题第 1 行（10-16 字，能放一行就一行）</title_line_1>
+<title_line_2>(标题超长才用第 2 行)</title_line_2>
+<title_line_3>(留空)</title_line_3>
+<title_line_4>(留空)</title_line_4>
+<word_count>稍后前端计算</word_count>
+<read_time>稍后前端计算</read_time>
+
+<social_title>小红书标题（14-20 字，1-2 个 emoji，有冲突）</social_title>
+<social_body>小红书帖子正文 150-200 字</social_body>
+<social_tags>5-10 个标签，一行一个，不带 #</social_tags>
+
+<hook>钩子句第 1 行
+钩子句第 2 行（数字 + 反差）</hook>
+
+<chapter>
+<chapter_label>01 / 章节标号</chapter_label>
+<chapter_title>**关键词**章节小标题（≤15 字）</chapter_title>
+<chapter_quote>"该章里最有冲突感的一句话"</chapter_quote>
+<chapter_body>这一章的正文，按用户指定字数</chapter_body>
+</chapter>
+
+[继续输出更多 chapter；章节数和每章字数由用户在 user message 里指定]
+
+<cta_tag>BOTTOM LINE</cta_tag>
+<cta_title>**关键词**核心观点</cta_title>
+<cta_summary>2-3 句流畅总结全文，不分条</cta_summary>
+<cta_text>软广文案（如"如果你也在 X，可以聊聊"）</cta_text>
+</note>
+
+# 严格要求
+1. 章节数、每章字数、总字数严格按 user message 里的指定执行
+2. title 优先 1 行装下
+3. 每个 chapter_body 都要写满（不要为了凑数水文）
+`;
 
 // 创建 Supabase 客户端（使用 service_role key 绕过 RLS）
 const supabase = createClient(
@@ -270,8 +318,15 @@ export default async function handler(req, res) {
   const startTime = Date.now();
   
   try {
-    const { userInput, images, mode } = req.body || {};
+    const { userInput, images, mode, targetLength } = req.body || {};
     const isCreate = mode === 'create';
+    const LENGTH_SPECS = {
+      short:  { total: '1500-2000', chapters: '4-5',  per: '300-400' },
+      medium: { total: '2500-3500', chapters: '5-7',  per: '400-500' },
+      long:   { total: '4000-5500', chapters: '7-9',  per: '500-650' },
+      xlong:  { total: '5500-7500', chapters: '9-12', per: '550-700' }
+    };
+    const lenSpec = LENGTH_SPECS[targetLength] || LENGTH_SPECS.medium;
     
     if (!userInput || typeof userInput !== 'string') {
       return res.status(400).json({ error: '请输入想法' });
@@ -321,7 +376,7 @@ export default async function handler(req, res) {
     let messageContent;
     if (isCreate) {
       // 创作模式：用户只给标题/主题，AI 全文创作
-      const creationGuard = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎨 创作模式硬要求：\n• 这是用户给的"主题/标题"，不是要保留的原文\n• 你需要从零创作一篇 2000-2800 字的 Founder Notes 长文\n• 5-7 章节，每章 300-450 字\n• 反共识、有冲突感、有具体数字/场景细节、中英混排自然\n• 不要凡尔赛，不要 LinkedIn 鸡汤体\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      const creationGuard = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎨 创作模式硬要求（必须严格遵守）：\n• 这是用户给的"主题/标题"，不是要保留的原文\n• **总字数：${lenSpec.total} 字（所有 chapter_body 加起来）**\n• **章节数：${lenSpec.chapters} 章，每章 chapter_body ${lenSpec.per} 字**\n• 每章都要写满，不要少于下限\n• 反共识、有冲突感、有具体数字/场景细节、中英混排自然\n• 不要凡尔赛，不要 LinkedIn 鸡汤体\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
       const promptText = `用户给我一个主题/标题：\n\n${userInput}${creationGuard}`;
       messageContent = hasImages
         ? [
