@@ -74,9 +74,9 @@ const SYSTEM_PROMPT = `你是一个专业的内容排版师，不是创作者，
 
 <note>
 <series>FOUNDER NOTES · 0X</series>
-<title_line_1>封面第1行 (5-10 字，在语义自然处断行)</title_line_1>
-<title_line_2>封面第2行 (5-10 字，构成完整标题)</title_line_2>
-<title_line_3>(选填，通常留空；只有标题本身超长时才用，5-10 字)</title_line_3>
+<title_line_1>封面第1行：把标题尽量排满（10-16 字，中英文都算），只在不得不换行时才用 title_line_2</title_line_1>
+<title_line_2>封面第2行（选填）：标题剩余部分，让两行视觉对齐</title_line_2>
+<title_line_3>(留空)</title_line_3>
 <title_line_4>(留空)</title_line_4>
 <word_count>稍后由前端计算</word_count>
 <read_time>稍后由前端计算</read_time>
@@ -136,11 +136,14 @@ const SYSTEM_PROMPT = `你是一个专业的内容排版师，不是创作者，
    - 3000-5000 字 → 6-7 章，每章 500-800 字
    - 5000+ 字 → 7-9 章，每章 600-900 字
 6. **social_title / social_body / social_tags 必须生成**
-7. **封面标题切成 2 行**（最多 3 行，绝不要 4 行）：
-   - 每行 5-10 字，含中英文均算字
-   - 在语义自然处断行（如主语 / 谓语 / 短句分界），不要硬拆词
+7. **封面标题**：
+   - **优先用 1 行**（title_line_1，10-16 字，含中英文都算）
+   - 标题超长才换行到 title_line_2，且第二行也尽量塞满
+   - 在语义自然处断行（如冒号后、短句分界），不要硬拆词
    - 不要给标题加 \*\*
-   - 例子："founder们都 / 怎么离婚的?" 而不是 "founder / 们都 / 怎么 / 离婚的?"
+   - 例子 1：title_line_1="Stan Store 投资备忘录" (一行就够)
+   - 例子 2：title_line_1="一家优秀小生意的" / title_line_2="增长困局" (实在长才拆)
+   - 反例：title_line_1="Stan" / title_line_2="Store" / title_line_3="投资备忘录"（绝对错）
 
 # 段落断行规则
 

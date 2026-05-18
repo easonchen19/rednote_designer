@@ -327,6 +327,13 @@
   .content .quote-box strong { color: #ffd97a; font-weight: 700; font-style: normal; }
   .content .quote-box em { color: #ffd97a; font-style: normal; }
   .content .body-text { margin-top: 20px; color: #e8e2d4; font-size: 15px; line-height: 1.2; letter-spacing: 0.6px; white-space: pre-wrap; word-wrap: break-word; flex: 1; overflow: hidden; font-weight: 400; }
+  /* 段落控制（所有主题共用，可被主题覆盖）*/
+  .content .body-text p,
+  .cta .summary-prose p,
+  .cover .hook p { margin: 0 0 0.5em 0; }
+  .content .body-text p:last-child,
+  .cta .summary-prose p:last-child,
+  .cover .hook p:last-child { margin-bottom: 0; }
   .content .body-text strong { color: #f5d98a; background: rgba(212, 168, 90, 0.18); padding: 1px 5px; font-weight: 600; border-radius: 2px; }
   .content .body-text em { color: #f5d98a; font-style: normal; font-weight: 700; }
   .content .pagination { position: absolute; bottom: 30px; left: 0; right: 0; display: flex; justify-content: center; gap: 5px; }
@@ -526,10 +533,17 @@
   body[data-theme="article"] .content .body-text {
     color: #1a1a1a;
     font-size: 16px;
-    line-height: 1.65;
+    line-height: 1.5;            /* 段内行距 1.5 */
     letter-spacing: 0;
     margin-top: 0;
   }
+  /* 段落之间的间距：约半个行高 */
+  body[data-theme="article"] .content .body-text p { margin: 0 0 8px 0; }
+  body[data-theme="article"] .content .body-text p:last-child { margin-bottom: 0; }
+  body[data-theme="article"] .cover .hook { line-height: 1.5; }
+  body[data-theme="article"] .cover .hook p { margin: 0 0 8px 0; }
+  body[data-theme="article"] .cta .summary-prose { line-height: 1.5; }
+  body[data-theme="article"] .cta .summary-prose p { margin: 0 0 8px 0; }
   body[data-theme="article"] .content .body-text strong {
     color: inherit; background: none; padding: 0; font-weight: 700;
   }
@@ -1841,7 +1855,11 @@ ${presplitMarked}`
       const inner = inlineFmt(b.text);
       if (b.type === 'h2') return `<h2>${inner}</h2>`;
       if (b.type === 'quote') return `<div class="chat-bubble">${inner}</div>`;
-      return inner.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
+      // Paragraphs: split on \n\n → 多个 <p>；单 \n → <br> 内部换行
+      const collapsed = inner.replace(/\n{3,}/g, '\n\n');
+      return collapsed.split(/\n\n+/).map(p =>
+        p.trim() ? `<p>${p.replace(/\n/g, '<br>')}</p>` : ''
+      ).join('');
     }).join('');
   }
   function parseMarkdownGold(text) {
