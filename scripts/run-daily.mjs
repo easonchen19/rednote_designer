@@ -88,8 +88,14 @@ async function main() {
   log('🗜️ 打包 ZIP...');
   const zipBuf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 9 } });
   const zipBase64 = zipBuf.toString('base64');
-  const zipFilename = `xiaohongshu_${new Date().toISOString().slice(0, 10)}.zip`;
-  log(`📦 ZIP ${Math.round(zipBuf.length / 1024)} KB（base64 ${Math.round(zipBase64.length / 1024)} KB）`);
+  // 文件名跟文章标题保持一致
+  const titleStr = (parsed.title_lines || []).filter(Boolean).join('').replace(/\*\*/g, '').trim();
+  const safeTitle = titleStr
+    .replace(/[\/\\:*?"<>|]/g, '')
+    .replace(/\s+/g, '_')
+    .slice(0, 60) || 'xiaohongshu';
+  const zipFilename = `${safeTitle}_${new Date().toISOString().slice(0, 10)}.zip`;
+  log(`📦 ZIP ${Math.round(zipBuf.length / 1024)} KB（base64 ${Math.round(zipBase64.length / 1024)} KB） → ${zipFilename}`);
   if (zipBase64.length > 4_400_000) {
     log(`⚠️ payload 接近 Vercel 4.5MB 上限，可能失败。建议减少章节或降低 deviceScaleFactor`);
   }
