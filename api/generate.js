@@ -1,5 +1,6 @@
 // /api/generate.js - Claude 代理 + 限流 + 日志（Supabase 版）
 import { createClient } from '@supabase/supabase-js';
+import { NEWS_COMMENTARY_PROMPT as CREATE_PROMPT } from './_lib/news.js';
 
 // 创建 Supabase 客户端（使用 service_role key 绕过 RLS）
 const supabase = createClient(
@@ -269,7 +270,8 @@ export default async function handler(req, res) {
   const startTime = Date.now();
   
   try {
-    const { userInput, images } = req.body || {};
+    const { userInput, images, mode } = req.body || {};
+    const isCreate = mode === 'create';
     
     if (!userInput || typeof userInput !== 'string') {
       return res.status(400).json({ error: '请输入想法' });
@@ -315,27 +317,35 @@ export default async function handler(req, res) {
     res.setHeader('Connection', 'keep-alive');
     
     const inputLen = (userInput || '').length;
-    const minBodyLen = Math.floor(inputLen * 0.85);
-    const lengthGuard = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🚨 硬指标（违反即重做）：\n• 原文 ${inputLen} 字\n• 所有 chapter_body 字数加起来必须 ≥ ${minBodyLen} 字\n• 不要总结、不要省略任何句子、不要合并细节\n• 你的工作只是：分章 + 断行 + 改错字。其他一律不动。\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
 
     let messageContent;
-    if (hasImages) {
-      messageContent = [
-        ...images.map(img => ({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: img.mimeType || 'image/jpeg',
-            data: img.base64
-          }
-        })),
-        {
-          type: 'text',
-          text: `下面是原文（${inputLen} 字），请把它原封不动地分章排版（不是总结，是搬运 + 断行）：\n\n${userInput}${lengthGuard}`
-        }
-      ];
+    if (isCreate) {
+      // 创作模式：用户只给标题/主题，AI 全文创作
+      const creationGuard = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🎨 创作模式硬要求：\n• 这是用户给的"主题/标题"，不是要保留的原文\n• 你需要从零创作一篇 2000-2800 字的 Founder Notes 长文\n• 5-7 章节，每章 300-450 字\n• 反共识、有冲突感、有具体数字/场景细节、中英混排自然\n• 不要凡尔赛，不要 LinkedIn 鸡汤体\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      const promptText = `用户给我一个主题/标题：\n\n${userInput}${creationGuard}`;
+      messageContent = hasImages
+        ? [
+            ...images.map(img => ({
+              type: 'image',
+              source: { type: 'base64', media_type: img.mimeType || 'image/jpeg', data: img.base64 }
+            })),
+            { type: 'text', text: '配合下面这些图片所传达的信息，从零创作一篇文章。\n\n' + promptText }
+          ]
+        : promptText;
     } else {
-      messageContent = `下面是原文（${inputLen} 字），请把它原封不动地分章排版（不是总结，是搬运 + 断行）：\n\n${userInput}${lengthGuard}`;
+      // 排版模式（原行为）：用户给原文，AI 保留 90% 字面内容
+      const minBodyLen = Math.floor(inputLen * 0.85);
+      const lengthGuard = `\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🚨 硬指标（违反即重做）：\n• 原文 ${inputLen} 字\n• 所有 chapter_body 字数加起来必须 ≥ ${minBodyLen} 字\n• 不要总结、不要省略任何句子、不要合并细节\n• 你的工作只是：分章 + 断行 + 改错字。其他一律不动。\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+      const promptText = `下面是原文（${inputLen} 字），请把它原封不动地分章排版（不是总结，是搬运 + 断行）：\n\n${userInput}${lengthGuard}`;
+      messageContent = hasImages
+        ? [
+            ...images.map(img => ({
+              type: 'image',
+              source: { type: 'base64', media_type: img.mimeType || 'image/jpeg', data: img.base64 }
+            })),
+            { type: 'text', text: promptText }
+          ]
+        : promptText;
     }
     
     // ⭐ 三层 Fallback：Sonnet 主力（质量+速度均衡）→ Opus（最强）→ Haiku（兜底）
@@ -365,7 +375,7 @@ export default async function handler(req, res) {
             body: JSON.stringify({
               model: model.id,
               max_tokens: 32000,
-              system: SYSTEM_PROMPT,
+              system: isCreate ? CREATE_PROMPT : SYSTEM_PROMPT,
               stream: true,
               messages: [{ role: 'user', content: messageContent }]
             })

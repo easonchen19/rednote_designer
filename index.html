@@ -648,17 +648,26 @@
 
     <div class="ai-section">
       <h3>🎙️ Step 1：告诉 AI 你的想法</h3>
-      
+
+      <!-- 模式选择：排版（保留原文）vs 创作（给标题 AI 写全文）-->
+      <div class="settings-row" style="display:flex; gap:8px; align-items:center; margin-bottom:12px;">
+        <label style="font-size:13px; color:#555; white-space:nowrap;">🛠 模式</label>
+        <select id="gen-mode" onchange="onModeChange(this.value)" style="flex:1; padding:8px 10px; border:1px solid #ddd; border-radius:6px; font-size:13px; background:#fff; cursor:pointer;">
+          <option value="layout">📝 排版 · 我有原文，请帮我分章排版（保留 90% 字面）</option>
+          <option value="create">✨ 创作 · 我只给标题/主题，AI 帮我写全文</option>
+        </select>
+      </div>
+
       <!-- ⭐ 输入方式 Tab -->
       <div class="input-tabs">
         <div class="input-tab active" data-method="text" onclick="switchMethod('text')">📝 文字</div>
         <div class="input-tab" data-method="image" onclick="switchMethod('image')">🖼️ 图片<span class="badge">NEW</span></div>
         <div class="input-tab" data-method="voice" onclick="switchMethod('voice')">🎤 语音<span class="badge">NEW</span></div>
       </div>
-      
+
       <!-- 文字输入 -->
       <div class="input-method active" id="method-text">
-        <div class="ai-hint">
+        <div class="ai-hint" id="text-hint">
           直接写下你的想法，越乱越好。AI 会自动提炼成 Will 风格的笔记。
         </div>
         <textarea class="ai-input" id="ai-input" placeholder="比如：今天和一个 Meta E7 的朋友吃饭..."></textarea>
@@ -1127,13 +1136,14 @@ Founder
   }
   
   // ============ AI 生成核心（调用后端 /api/generate）============
-  async function callClaudeAPIStreaming(userInput, onChunk) {
+  async function callClaudeAPIStreaming(userInput, onChunk, opts = {}) {
     setStep('connect', 'active', '连接中...');
-    
+    const mode = opts.mode || (document.getElementById('gen-mode')?.value || 'layout');
+
     const response = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userInput })
+      body: JSON.stringify({ userInput, mode })
     });
     
     if (!response.ok) {
@@ -1411,14 +1421,20 @@ Founder
       const marked = sections.map((s, i) => `=== 第 ${i + 1} 段 ===\n${s}`).join('\n\n');
       return { sections, marked };
     }
-    const { sections: presplitSections, marked: presplitMarked } = preChunkInput(input);
-    const useChunked = input.length >= 2000 && presplitSections.length >= 3;
-    // 极强指令：列出每章的标号要求，强制 AI 输出 N 个 chapter
-    const chapterEnumeration = useChunked
-      ? presplitSections.map((_, i) => `必须输出 <chapter_label>${String(i + 1).padStart(2, '0')} / 第${i + 1}章</chapter_label> 的完整 <chapter>...</chapter>，对应「第 ${i + 1} 段」原文`).join('\n')
-      : '';
-    const aiInput = useChunked
-      ? `🚨 强制要求：原文已切成 ${presplitSections.length} 段。你必须输出 ${presplitSections.length} 个完整 <chapter> 块，按段顺序，每段一章，绝对不准合并/省略。
+    // 创作模式：跳过预切段（输入是短标题，不需要分段对应章节）
+    const genMode = document.getElementById('gen-mode')?.value || 'layout';
+    let aiInput;
+    if (genMode === 'create') {
+      aiInput = input;
+      console.log(`🎨 创作模式：基于「${input.slice(0, 40)}...」从零生成`);
+    } else {
+      const { sections: presplitSections, marked: presplitMarked } = preChunkInput(input);
+      const useChunked = input.length >= 2000 && presplitSections.length >= 3;
+      const chapterEnumeration = useChunked
+        ? presplitSections.map((_, i) => `必须输出 <chapter_label>${String(i + 1).padStart(2, '0')} / 第${i + 1}章</chapter_label> 的完整 <chapter>...</chapter>，对应「第 ${i + 1} 段」原文`).join('\n')
+        : '';
+      aiInput = useChunked
+        ? `🚨 强制要求：原文已切成 ${presplitSections.length} 段。你必须输出 ${presplitSections.length} 个完整 <chapter> 块，按段顺序，每段一章，绝对不准合并/省略。
 
 逐章清单（${presplitSections.length} 个，缺一不可）：
 ${chapterEnumeration}
@@ -1428,8 +1444,9 @@ ${chapterEnumeration}
 下面是 ${presplitSections.length} 段原文：
 
 ${presplitMarked}`
-      : input;
-    if (useChunked) console.log(`📑 长文本预切段：${presplitSections.length} 段，原文 ${input.length} 字`);
+        : input;
+      if (useChunked) console.log(`📑 长文本预切段：${presplitSections.length} 段，原文 ${input.length} 字`);
+    }
     
     try {
       let result = await callClaudeAPIStreaming(aiInput, (text) => appendStream(text));
@@ -1441,7 +1458,8 @@ ${presplitMarked}`
         bodyLen: (r.chapters || []).reduce((s, ch) => s + (ch.body || '').length, 0)
       });
       let { chapters: chCount, bodyLen } = measure(result);
-      const tooFew = inputLen >= 1500 && (bodyLen < inputLen * 0.7 || chCount < 3);
+      // 压缩检测仅适用于"排版模式"（创作模式 input 是短标题，output 会远大于 input）
+      const tooFew = genMode !== 'create' && inputLen >= 1500 && (bodyLen < inputLen * 0.7 || chCount < 3);
       if (tooFew) {
         console.warn(`⚠️ AI 输出疑似压缩：原文 ${inputLen} 字，输出 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%），${chCount} 章。自动重试一次...`);
         showStatus(`⚠️ 内容被压缩（${Math.round(bodyLen/inputLen*100)}%），自动重试...`, 'warn');
@@ -1458,7 +1476,7 @@ ${presplitMarked}`
       }
 
       setStep('layout', 'active', '测量高度，精准分页...');
-      if (inputLen >= 1500 && bodyLen < inputLen * 0.7) {
+      if (genMode !== 'create' && inputLen >= 1500 && bodyLen < inputLen * 0.7) {
         showStatus(`⚠️ 原文 ${inputLen} 字，最终保留 ${bodyLen} 字（${Math.round(bodyLen/inputLen*100)}%），如不满意请再点一次生成`, 'warn');
       }
 
@@ -2077,6 +2095,21 @@ ${presplitMarked}`
     }
   }
 
+  // 🛠 模式切换：排版 / 创作
+  function onModeChange(mode) {
+    const hint = document.getElementById('text-hint');
+    const input = document.getElementById('ai-input');
+    if (mode === 'create') {
+      if (hint) hint.textContent = '✨ 给一个标题或主题（一句话即可），AI 帮你写一篇 2000-2800 字的 Founder Notes 长文。';
+      if (input) input.placeholder = '比如：硅谷的中年危机为什么是假的';
+    } else {
+      if (hint) hint.textContent = '直接写下你的想法，越乱越好。AI 会自动提炼成 Will 风格的笔记。';
+      if (input) input.placeholder = '比如：今天和一个 Meta E7 的朋友吃饭...';
+    }
+    localStorage.setItem('gen_mode', mode);
+  }
+  window.onModeChange = onModeChange;
+
   // 🌅 手动触发 RSS 自动生成 + 发邮件（SSE 流式可视化）
   async function runDailyNow() {
     const btn = document.getElementById('auto-run-btn');
@@ -2178,6 +2211,11 @@ ${presplitMarked}`
     localStorage.setItem('page_theme', theme);
     renderPreview();
   }
+  const savedMode = localStorage.getItem('gen_mode') || 'layout';
+  const modeSel = document.getElementById('gen-mode');
+  if (modeSel) modeSel.value = savedMode;
+  onModeChange(savedMode);
+
   const savedTheme = localStorage.getItem('page_theme') || 'dark-gold';
   document.getElementById('theme-select').value = savedTheme;
   applyTheme(savedTheme);
