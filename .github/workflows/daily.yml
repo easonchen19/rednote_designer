@@ -2,9 +2,10 @@ name: Daily Founder Notes (with images)
 
 on:
   schedule:
-    # 14:00 UTC = 7am PDT (summer) / 6am PST (winter). 冬天想保持 7am 就改成 '0 15 * * *'
-    - cron: '0 14 * * *'
-  workflow_dispatch:  # 允许在 GitHub Actions 页面手动触发
+    # 全年 7am Pacific Time（DST 感知，近似）
+    - cron: '0 14 * 3-10 *'      # PDT 月份（3-10 月）：14:00 UTC = 7am PDT
+    - cron: '0 15 * 11,12,1,2 *' # PST 月份（11,12,1,2 月）：15:00 UTC = 7am PST
+  workflow_dispatch:  # 也可以在 GitHub Actions 页面手动触发
 
 permissions:
   contents: read
