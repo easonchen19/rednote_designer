@@ -420,7 +420,7 @@
   body[data-theme="notion"] .cta .cta-line { color: #1f1f1f; }
   body[data-theme="notion"] .cta .follow-line { color: #555; border-color: #d9d9d6; }
 
-  /* === 长文 · 文章风格 === */
+  /* === 长文 · 文章风格（参考小红书长图样式）=== */
   /* 默认隐藏封面图（图片功能暂未启用） */
   .cover .cover-image { display: none; }
 
@@ -431,85 +431,159 @@
     box-shadow: 0 4px 18px rgba(0,0,0,0.08);
   }
 
-  /* 封面：极简，只有标题 + 作者 */
-  body[data-theme="article"] .page.cover { padding: 60px 32px 40px 32px; }
-  body[data-theme="article"] .cover .series { color: #999; font-weight: 500; font-size: 11px; }
-  body[data-theme="article"] .cover .series::before { background: #1a1a1a; }
-  body[data-theme="article"] .cover .meta,
-  body[data-theme="article"] .cover .divider,
-  body[data-theme="article"] .cover .hook { display: none; }
+  /* === 封面 === */
+  body[data-theme="article"] .page.cover { padding: 50px 28px 32px 28px; }
+  body[data-theme="article"] .cover .series { display: none; }
+
+  /* 标题外框：左右两根金色竖条 */
   body[data-theme="article"] .cover .title-block {
-    margin-top: 40px;
-    padding: 0;
-    border: none;
+    display: inline-block;
+    margin-top: 30px;
+    padding: 4px 14px;
+    border-left: 3px solid #c4a05a;
+    border-right: 3px solid #c4a05a;
+    border-image: none;
   }
+  /* 每行标题：奶油色 highlight + 大粗黑字 */
   body[data-theme="article"] .cover .title-line {
+    display: table;              /* 块级 + 自适应宽度（贴合文字）*/
+    background: #faecc2;
+    padding: 2px 8px;
+    margin-bottom: 4px;
     color: #1a1a1a;
-    font-size: 26px;
-    font-weight: 700;
-    line-height: 1.4;
+    font-size: 46px;
+    font-weight: 900;
+    line-height: 1.32;
     letter-spacing: 0;
-    margin-bottom: 0;
   }
   body[data-theme="article"] .cover .title-line.white { color: #1a1a1a; }
+  body[data-theme="article"] .cover .title-line.en { font-size: 42px; }
+
+  /* meta 行：金色左竖条 + 深字 */
+  body[data-theme="article"] .cover .meta {
+    display: block;
+    margin-top: 36px;
+    padding-left: 10px;
+    border-left: 3px solid #c4a05a;
+    color: #1a1a1a;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+  }
+  body[data-theme="article"] .cover .divider { display: none; }
+
+  /* hook 作为引语正文 */
+  body[data-theme="article"] .cover .hook {
+    margin-top: 24px;
+    color: #1a1a1a;
+    font-size: 15.5px;
+    line-height: 1.78;
+    letter-spacing: 0;
+    font-weight: 400;
+  }
   body[data-theme="article"] .cover .footer { color: #999; bottom: 24px; }
   body[data-theme="article"] .cover .avatar { border-color: #ddd; }
 
-  /* 内容页：极简、紧凑、可控行距 */
-  body[data-theme="article"] .page.content { padding: 36px 32px 44px 32px; }
-  body[data-theme="article"] .content .chapter-tag,
-  body[data-theme="article"] .content .chapter-title,
-  body[data-theme="article"] .content .quote-box,
+  /* === 内容页 === */
+  body[data-theme="article"] .page.content { padding: 48px 28px 56px 28px; }
+  body[data-theme="article"] .content .chapter-tag { display: none; }
+  body[data-theme="article"] .content .quote-box { display: none; }
   body[data-theme="article"] .content .pagination { display: none; }
+
+  /* 章节标题：左侧粗金色竖条 + 大粗黑字 */
+  body[data-theme="article"] .content .chapter-title {
+    display: block;
+    padding-left: 14px;
+    margin: 0 0 22px 0;
+    font-size: 28px;
+    font-weight: 900;
+    line-height: 1.32;
+    color: #1a1a1a;
+    border-left: 4px solid #c4a05a;
+  }
+  body[data-theme="article"] .content .chapter-title .gold {
+    color: inherit;
+    background: none;
+    padding: 0;
+  }
+
+  /* 正文 */
   body[data-theme="article"] .content .body-text {
     color: #1a1a1a;
-    font-size: 15px;
-    line-height: 1.55;            /* 紧凑可控，同段落内 1.55 倍 */
+    font-size: 15.5px;
+    line-height: 1.78;            /* 段内行距 1.78 */
     letter-spacing: 0;
     margin-top: 0;
   }
-  /* 段落之间靠 <br><br>（来自 \n\n）拉开，等于一个 line-height 的空行 */
   body[data-theme="article"] .content .body-text strong {
     color: inherit; background: none; padding: 0; font-weight: 700;
   }
   body[data-theme="article"] .content .body-text em {
     color: inherit; background: none; padding: 0; font-style: normal; font-weight: 700;
   }
-  /* h2（## 标记）：保留但低调，不要装饰 */
+  /* ## 二级小标题（如"沉默离婚"）：稍大粗体 */
   body[data-theme="article"] .body-text h2 {
-    font-size: 16px;
+    font-size: 17px;
     font-weight: 700;
-    margin: 18px 0 6px 0;
+    margin: 22px 0 8px 0;
     color: #1a1a1a;
     line-height: 1.4;
   }
   body[data-theme="article"] .body-text h2:first-child { margin-top: 0; }
-  /* > 引述：浅灰底小圆角，紧凑 */
+  /* > 引述气泡 */
   body[data-theme="article"] .body-text .chat-bubble {
     display: block;
-    margin: 10px 0;
-    padding: 10px 14px;
+    margin: 12px 0;
+    padding: 12px 16px;
     background: #f4f4f3;
     border-radius: 4px;
     color: #3a3a3a;
-    font-size: 14px;
-    line-height: 1.55;
+    font-size: 14.5px;
+    line-height: 1.65;
   }
 
-  /* CTA 页 */
-  body[data-theme="article"] .page.cta { padding: 50px 32px 40px 32px; }
-  body[data-theme="article"] .cta .small-tag { color: #999; font-size: 11px; }
-  body[data-theme="article"] .cta .big-title { color: #1a1a1a; font-size: 22px; font-weight: 700; line-height: 1.35; }
-  body[data-theme="article"] .cta .big-title .gold { color: #1a1a1a; }
+  /* === CTA 页 === */
+  body[data-theme="article"] .page.cta { padding: 56px 28px 36px 28px; }
+  body[data-theme="article"] .cta .small-tag {
+    color: #c4a05a;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 2px;
+  }
+  body[data-theme="article"] .cta .big-title {
+    display: block;
+    margin-top: 14px;
+    padding-left: 14px;
+    border-left: 4px solid #c4a05a;
+    color: #1a1a1a;
+    font-size: 26px;
+    font-weight: 900;
+    line-height: 1.32;
+  }
+  body[data-theme="article"] .cta .big-title .gold {
+    color: inherit; background: none; padding: 0;
+  }
   body[data-theme="article"] .cta .summary-prose {
-    color: #1a1a1a; border-left-color: #ddd; font-size: 15px; line-height: 1.55; margin-top: 18px;
+    color: #1a1a1a;
+    margin-top: 26px;
+    padding-left: 14px;
+    border-left: 3px solid #c4a05a;
+    font-size: 15.5px;
+    line-height: 1.78;
   }
   body[data-theme="article"] .cta .summary-prose strong,
   body[data-theme="article"] .cta .summary-prose em {
     color: inherit; background: none; padding: 0; font-style: normal; font-weight: 700;
   }
-  body[data-theme="article"] .cta .cta-line { color: #1a1a1a; font-size: 14px; line-height: 1.55; }
-  body[data-theme="article"] .cta .follow-line { color: #666; border-color: #ddd; font-size: 12px; }
+  body[data-theme="article"] .cta .cta-line {
+    color: #1a1a1a; font-size: 15px; line-height: 1.7; margin-top: 32px;
+  }
+  body[data-theme="article"] .cta .follow-line {
+    color: #c4a05a;
+    border-color: #c4a05a;
+    font-size: 13px;
+    font-weight: 600;
+  }
 </style>
 </head>
 <body>
