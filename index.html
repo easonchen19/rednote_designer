@@ -442,30 +442,37 @@
   body[data-theme="article"] .cover .series { display: none; }
   body[data-theme="article"] .cover .divider { display: none; }
 
-  /* 标题外壳：左右两根金竖条 */
+  /* 标题外壳（无 border，改由各行自带）*/
   body[data-theme="article"] .cover .title-block {
     display: inline-block;
     margin-top: 24px;
-    padding: 5px 14px;
-    border-left: 4px solid #b8945c;
-    border-right: 4px solid #b8945c;
+    padding: 0;
+    border: none;
     border-image: none;
   }
-  /* 每行标题：奶油黄 highlight + 粗黑字 + 紧凑行距 */
+  /* 每行标题：奶油黄 highlight + 粗黑字 */
   body[data-theme="article"] .cover .title-line {
     display: table;
     background: #f9e9b3;
     padding: 3px 8px;
-    margin-bottom: 5px;
+    margin-bottom: 6px;
     color: #1a1a1a;
-    font-size: 38px;
+    font-size: 27px;
     font-weight: 900;
     line-height: 1.28;
     letter-spacing: 0;
   }
   body[data-theme="article"] .cover .title-line:last-child { margin-bottom: 0; }
   body[data-theme="article"] .cover .title-line.white { color: #1a1a1a; }
-  body[data-theme="article"] .cover .title-line.en { font-size: 34px; }
+  body[data-theme="article"] .cover .title-line.en { font-size: 24px; }
+  /* 第一行：仅在左侧加一根金竖条 */
+  body[data-theme="article"] .cover .title-line:first-child {
+    border-left: 4px solid #b8945c;
+  }
+  /* 最后一行：仅在右侧加一根金竖条（像"已选中"的开闭标记）*/
+  body[data-theme="article"] .cover .title-line:last-child {
+    border-right: 4px solid #b8945c;
+  }
 
   /* meta 行：金竖条 + 加粗黑字 */
   body[data-theme="article"] .cover .meta {
