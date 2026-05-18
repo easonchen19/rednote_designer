@@ -47,7 +47,7 @@ async function main() {
   const browser = await chromium.launch({ args: ['--no-sandbox'] });
   const context = await browser.newContext({
     viewport: { width: 600, height: 900 },
-    deviceScaleFactor: 3
+    deviceScaleFactor: 2  // 2x 足以手机端高清显示；3x 时 zip 太大 (>4.5MB 触发 Vercel 上限)
   });
   const page = await context.newPage();
   page.on('pageerror', err => log(`⚠️ page error: ${err.message}`));
@@ -86,10 +86,13 @@ async function main() {
 
   await browser.close();
   log('🗜️ 打包 ZIP...');
-  const zipBuf = await zip.generateAsync({ type: 'nodebuffer' });
+  const zipBuf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 9 } });
   const zipBase64 = zipBuf.toString('base64');
   const zipFilename = `xiaohongshu_${new Date().toISOString().slice(0, 10)}.zip`;
-  log(`📦 ZIP ${Math.round(zipBuf.length / 1024)} KB`);
+  log(`📦 ZIP ${Math.round(zipBuf.length / 1024)} KB（base64 ${Math.round(zipBase64.length / 1024)} KB）`);
+  if (zipBase64.length > 4_400_000) {
+    log(`⚠️ payload 接近 Vercel 4.5MB 上限，可能失败。建议减少章节或降低 deviceScaleFactor`);
+  }
 
   // ─── 3. 调 Vercel 发邮件（带 ZIP）────────────────
   log('📧 调 /api/cron-daily-finish 发邮件...');
