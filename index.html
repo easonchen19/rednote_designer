@@ -489,8 +489,8 @@
     font-weight: 400;
   }
 
-  body[data-theme="article"] .cover .footer { color: #999; bottom: 20px; font-size: 11px; }
-  body[data-theme="article"] .cover .avatar { border-color: #ddd; }
+  /* article 风格的封面不放作者/页码（参考截图里没有），保持纯净 */
+  body[data-theme="article"] .cover .footer { display: none; }
 
   /* ============== 内容页 ============== */
   body[data-theme="article"] .page.content { padding: 48px 28px 50px 28px; }
