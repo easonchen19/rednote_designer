@@ -151,7 +151,7 @@ ${list}
   return { index: 1, angle: '' };
 }
 
-async function generateNote(seed, apiKey) {
+async function generateNoteStreaming(seed, apiKey, onChunk) {
   const userMessage = `今天看到一条新闻：
 
 标题：${seed.title}
@@ -173,6 +173,7 @@ async function generateNote(seed, apiKey) {
       model: 'claude-sonnet-4-6',
       max_tokens: 16000,
       system: NEWS_COMMENTARY_PROMPT,
+      stream: true,
       messages: [{ role: 'user', content: userMessage }]
     })
   });
@@ -180,8 +181,33 @@ async function generateNote(seed, apiKey) {
     const errText = await resp.text();
     throw new Error(`Claude generate err ${resp.status}: ${errText.slice(0, 300)}`);
   }
-  const data = await resp.json();
-  return data?.content?.[0]?.text || '';
+
+  // Parse Anthropic SSE stream and accumulate text
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      const data = line.slice(6);
+      if (data === '[DONE]') continue;
+      try {
+        const json = JSON.parse(data);
+        if (json.type === 'content_block_delta' && json.delta?.type === 'text_delta') {
+          const chunk = json.delta.text;
+          fullText += chunk;
+          if (onChunk) onChunk(chunk);
+        }
+      } catch {}
+    }
+  }
+  return fullText;
 }
 
 function ext(content, tag) {
@@ -294,12 +320,21 @@ export default async function handler(req, res) {
     return;
   }
 
+  // SSE headers - 流式响应给前端实时展示
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+  const emit = (type, data = {}) => {
+    try { res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`); } catch {}
+  };
+
   const feeds = (process.env.RSS_FEEDS || '')
     .split(',').map(s => s.trim()).filter(Boolean)
     .map(url => ({ url, source: new URL(url).hostname }));
   const feedList = feeds.length ? feeds : DEFAULT_FEEDS;
 
-  // 决定渲染时用的应用根 URL
   const baseUrl = process.env.BASE_URL
     || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
     || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
@@ -308,53 +343,66 @@ export default async function handler(req, res) {
   const theme = process.env.AUTO_THEME || 'article';
 
   try {
-    console.log(`[cron-daily] 拉取 ${feedList.length} 个 RSS 源...`);
+    emit('step', { name: 'rss', msg: `📡 拉取 ${feedList.length} 个 RSS 源...` });
     const allItems = (await Promise.all(feedList.map(fetchFeed))).flat();
     if (allItems.length === 0) throw new Error('No RSS items fetched from any feed');
-    console.log(`[cron-daily] 收到 ${allItems.length} 条候选`);
+    emit('step', { name: 'rss-done', msg: `📥 收到 ${allItems.length} 条候选` });
 
+    emit('step', { name: 'pick', msg: '🎯 让 Claude 选稿...' });
     const pick = await pickBest(allItems, claudeKey);
     const seed = { ...allItems[pick.index - 1], angle: pick.angle };
-    console.log(`[cron-daily] 选中：${seed.title} (${seed.source})`);
+    emit('step', { name: 'picked', msg: `✍️ 选中：${seed.title}（${seed.source}）` });
+    if (seed.angle) emit('step', { name: 'angle', msg: `💡 切入角度：${seed.angle}` });
 
-    const xml = await generateNote(seed, claudeKey);
+    emit('step', { name: 'generate-start', msg: '📝 流式生成文章...' });
+    let streamedChars = 0;
+    const xml = await generateNoteStreaming(seed, claudeKey, (chunk) => {
+      streamedChars += chunk.length;
+      emit('token', { chunk, chars: streamedChars });
+    });
     const parsed = parseResponse(xml);
     const bodyChars = parsed.chapters.reduce((s, c) => s + (c.body || '').length, 0);
-    console.log(`[cron-daily] 生成 ${parsed.chapters.length} 章 / ${bodyChars} 字`);
+    emit('step', { name: 'generated', msg: `✅ 生成完成：${parsed.chapters.length} 章 / ${bodyChars} 字` });
 
-    // 渲染图片 + 打包 ZIP
-    let zipBase64;
-    let zipFilename;
-    let imageCount = 0;
+    emit('step', { name: 'render-start', msg: '🖼️ Chromium 启动，准备截图...' });
+    let zipBase64, zipFilename, imageCount = 0;
     try {
-      console.log(`[cron-daily] 启动 Puppeteer 截图，baseUrl=${baseUrl}, theme=${theme}`);
-      const buffers = await renderPagesToBuffers(parsed, { baseUrl, theme });
+      const buffers = await renderPagesToBuffers(parsed, { baseUrl, theme }, (msg) => {
+        emit('step', { name: 'render-progress', msg: '   ' + msg });
+      });
       imageCount = buffers.length;
-      console.log(`[cron-daily] 截图完成 ${imageCount} 张，正在打包 ZIP`);
+      emit('step', { name: 'rendered', msg: `📸 截图 ${imageCount} 张完成` });
+
+      emit('step', { name: 'zip', msg: '📦 打包 ZIP...' });
       const zip = new JSZip();
       for (const { filename, buffer } of buffers) zip.file(filename, buffer);
       const zipBuf = await zip.generateAsync({ type: 'nodebuffer' });
       zipBase64 = zipBuf.toString('base64');
       zipFilename = `xiaohongshu_${new Date().toISOString().slice(0, 10)}.zip`;
+      emit('step', { name: 'zipped', msg: `📦 ZIP 已打好 ${Math.round(zipBuf.length / 1024)} KB` });
     } catch (renderErr) {
-      console.error('[cron-daily] 渲染/打包失败，邮件改为只发文字：', renderErr);
+      emit('step', { name: 'render-failed', msg: `⚠️ 渲染失败，邮件改为只发文字：${renderErr.message}` });
+      console.error('[cron-daily] 渲染/打包失败：', renderErr);
     }
 
+    emit('step', { name: 'email', msg: `📧 发送邮件到 ${to}...` });
     await sendEmail({ to, parsed, seed, zipBase64, zipFilename });
-    console.log(`[cron-daily] 邮件发送到 ${to}`);
 
     const titleStr = (parsed.title_lines || []).filter(Boolean).join('').replace(/\*\*/g, '');
-    res.status(200).json({
+    emit('done', {
       ok: true,
       seed: { title: seed.title, source: seed.source, link: seed.link },
       title: titleStr,
       chapters: parsed.chapters.length,
       bodyChars,
       images: imageCount,
-      emailedTo: to
+      emailedTo: to,
+      msg: `🎉 完成！${imageCount > 0 ? `${imageCount} 张图 + ` : ''}全文已发到 ${to}`
     });
   } catch (err) {
     console.error('[cron-daily] error:', err);
-    res.status(500).json({ error: err.message });
+    emit('error', { message: err.message });
+  } finally {
+    try { res.end(); } catch {}
   }
 }

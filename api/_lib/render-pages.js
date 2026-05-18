@@ -12,7 +12,10 @@ import puppeteer from 'puppeteer-core';
  * @param {string} opts.theme   - 'article' | 'dark-gold' | 'notion'
  * @returns {Promise<Array<{filename: string, buffer: Buffer}>>}
  */
-export async function renderPagesToBuffers(parsed, { baseUrl, theme = 'article' }) {
+export async function renderPagesToBuffers(parsed, { baseUrl, theme = 'article' }, onProgress) {
+  const progress = (msg) => { try { onProgress && onProgress(msg); } catch {} };
+
+  progress('Chromium 加载中');
   const executablePath = await chromium.executablePath();
   const browser = await puppeteer.launch({
     args: [...chromium.args, '--font-render-hinting=none'],
@@ -29,30 +32,27 @@ export async function renderPagesToBuffers(parsed, { baseUrl, theme = 'article' 
       if (msg.type() === 'error' || /warn/i.test(text)) console.warn('[puppeteer console]', text);
     });
 
+    progress(`访问 ${baseUrl}`);
     await page.goto(baseUrl, { waitUntil: 'networkidle0', timeout: 45000 });
 
-    // 等待主脚本初始化（fillFromAI 是函数声明，挂在 window 上）
     await page.waitForFunction(
       () => typeof window.fillFromAI === 'function' && typeof window.applyTheme === 'function',
       { timeout: 15000 }
     );
 
-    // 注入主题 + 内容
+    progress(`注入内容（主题：${theme}）`);
     await page.evaluate(({ data, theme }) => {
       window.applyTheme(theme);
       window.fillFromAI(data);
     }, { data: parsed, theme });
 
-    // 等待 #pages-output 渲染完成
     await page.waitForSelector('#pages-output .page', { timeout: 15000 });
-    // 给分页算法时间跑完
     await new Promise(r => setTimeout(r, 2000));
-
-    // 关掉手机端缩放（exporting 类会取消 scale transform）
     await page.evaluate(() => document.body.classList.add('exporting'));
 
     const handles = await page.$$('#pages-output .page');
     if (handles.length === 0) throw new Error('Puppeteer 没找到 .page 元素');
+    progress(`共 ${handles.length} 页，开始截图`);
 
     const buffers = [];
     for (let i = 0; i < handles.length; i++) {
@@ -60,6 +60,7 @@ export async function renderPagesToBuffers(parsed, { baseUrl, theme = 'article' 
       const pageType = (await h.evaluate(el => el.getAttribute('data-page'))) || `page_${String(i + 1).padStart(2, '0')}`;
       const buf = await h.screenshot({ type: 'png', omitBackground: false });
       buffers.push({ filename: `${pageType}.png`, buffer: buf });
+      progress(`截图 ${i + 1}/${handles.length}：${pageType}`);
     }
     return buffers;
   } finally {
