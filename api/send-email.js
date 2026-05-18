@@ -50,7 +50,17 @@ export default async function handler(req, res) {
       <p style="font-size: 12px; color: #888;">附件包含小红书发布所需的全部图片（PNG）。</p>
     </div>`;
 
-    const fromAddress = process.env.RESEND_FROM || 'Founder Notes <onboarding@resend.dev>';
+    // Resend 严格大小写匹配验证域名 → 强制邮箱域名小写
+    const rawFrom = process.env.RESEND_FROM || 'Founder Notes <onboarding@resend.dev>';
+    const fromAddress = rawFrom.replace(/<([^>]+)>/, (_, email) => {
+      const at = email.lastIndexOf('@');
+      if (at < 0) return `<${email.toLowerCase()}>`;
+      return `<${email.slice(0, at)}@${email.slice(at + 1).toLowerCase()}>`;
+    }).replace(/^([^\s<]+@[^\s<]+)$/, (m) => {
+      // 形如 noreply@domain.com 没带尖括号的也兼容
+      const at = m.lastIndexOf('@');
+      return `${m.slice(0, at)}@${m.slice(at + 1).toLowerCase()}`;
+    });
     const filename = zipFilename || `xiaohongshu_${new Date().toISOString().slice(0, 10)}.zip`;
 
     const resp = await fetch('https://api.resend.com/emails', {
