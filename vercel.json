@@ -11,8 +11,14 @@
     },
     "api/send-email.js": {
       "maxDuration": 60
+    },
+    "api/cron-daily.js": {
+      "maxDuration": 300
     }
   },
+  "crons": [
+    { "path": "/api/cron-daily", "schedule": "0 14 * * *" }
+  ],
   "rewrites": [
     { "source": "/admin", "destination": "/admin.html" }
   ]
