@@ -1852,7 +1852,8 @@ ${presplitMarked}`
     const output = document.getElementById('pages-output');
     let html = '';
     const series = document.getElementById('series').value;
-    const titleLines = stripMarkdown(document.getElementById('title').value).split('\n');
+    // 过滤空行（AI 可能生成 4 行但留 2 行空）
+    const titleLines = stripMarkdown(document.getElementById('title').value).split('\n').filter(l => l && l.trim());
     const wordCount = document.getElementById('word-count').value;
     const readTime = document.getElementById('read-time').value;
     const hook = document.getElementById('hook').value;
