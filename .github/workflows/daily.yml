@@ -1,0 +1,37 @@
+name: Daily Founder Notes (with images)
+
+on:
+  schedule:
+    # 14:00 UTC = 7am PDT (summer) / 6am PST (winter). 冬天想保持 7am 就改成 '0 15 * * *'
+    - cron: '0 14 * * *'
+  workflow_dispatch:  # 允许在 GitHub Actions 页面手动触发
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install script deps
+        working-directory: ./scripts
+        run: npm install
+
+      - name: Install Playwright Chromium
+        working-directory: ./scripts
+        run: npx playwright install --with-deps chromium
+
+      - name: Run daily pipeline
+        working-directory: ./scripts
+        env:
+          VERCEL_APP_URL: ${{ secrets.VERCEL_APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          AUTO_THEME: ${{ vars.AUTO_THEME || 'article' }}
+        run: node run-daily.mjs

@@ -1,0 +1,9 @@
+{
+  "name": "rednote-daily-runner",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.49.0",
+    "jszip": "^3.10.1"
+  }
+}
